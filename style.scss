@@ -1,0 +1,94 @@
+////////////////////////////////////////////////////////
+// style.scss for Asteriskx.github.io
+// Author : Asteriskx
+////////////////////////////////////////////////////////
+@import "./materialize-src/sass/materialize.scss";
+
+$color-bk: #0a1432;
+$color-hover: #0d47a1;
+
+html {
+	font-family: Roboto, "Noto Sans", "Noto Sans CJK JP", sans-serif;
+	//@media (min-width:480px) { font-size: 60px; }
+}
+
+.body {
+	background-color: $color-bk;
+}
+
+nav {
+	z-index: 1;
+	background-color: $color-bk;
+	>.brand-logo {
+		background-color: $color-bk;
+	}
+}
+
+.card {
+	color: #ffffff;
+	background-color: $color-bk;
+	z-index: 1;
+	box-shadow: 2px 2px 0px 2px rgba(0, 0, 0, 0.2), 2px 2px 20px -2px rgba(0, 0, 0, 1), 2px 2px 11px 0px rgba(0, 0, 0, 1);
+}
+
+.card-content {
+	background-color: $color-bk;
+	> p {
+		color: #ffffff;
+		padding-left: 18px;
+	}
+	> h6 {
+		> i {
+			padding-right: 0.5rem;
+		}
+	}
+}
+
+.collection {
+	>.collection-item {
+		@extend .white-text;
+		background-color: $color-bk;
+		> .secondary-content .material-icons {
+			@extend .white-text;
+		}
+	}
+	> a:hover {
+		@extend .black-text;
+	}
+}
+
+.waves-effect {
+	@extend .white-text;
+	background-color: $color-bk;
+}
+
+.progress {
+	@extend .blue, .lighten-4;
+	> .determinate {
+		@extend .blue, .darken-1;
+	}
+}
+
+.page-footer {
+	background-color: transparent; 
+	.footer-copyright {
+		background-color: $color-bk;
+	}
+	> a {
+		@extend .white-text;
+		background-color: $color-bk;
+	}
+}
+
+.container {
+	color: rgba(255, 255, 255, 0.7);
+	> .center {
+		> a {
+			color: rgba(255, 255, 255, 0.7);
+		}
+	} 
+}
+
+.icon-block .material-icons {
+	font-size: inherit;
+}
