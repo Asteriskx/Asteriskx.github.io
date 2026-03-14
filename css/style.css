@@ -1,3 +1,32 @@
+.t1 {
+  height: 80vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+ 
+.typing-effect {
+  width: 23ch;
+  animation: typing 3s steps(100), effect .5s step-end infinite alternate;
+  white-space: nowrap;
+  overflow: hidden;
+  border-right: 3px solid;
+  font-family: monospace;
+  font-size: 2em;
+}
+ 
+@keyframes typing {
+  from {
+    width: 0
+  }
+}
+    
+@keyframes effect {
+  50% {
+    border-color: transparent
+  }
+}
+
 .materialize-red {
   background-color: #e51c23 !important; }
 
