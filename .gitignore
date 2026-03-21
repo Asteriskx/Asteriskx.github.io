@@ -17,8 +17,12 @@ remix-app/app/content/blog/_drafts/
 .DS_Store
 Thumbs.db
 
-# Old project files
+# Old/unused project files
 old/
+assets/
+CNAME
+style.scss
+sample/
 
 # Editor
 .vscode/
