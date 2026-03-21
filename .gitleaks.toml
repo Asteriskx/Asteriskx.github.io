@@ -1,0 +1,14 @@
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+description = "Generic API key or secret variable"
+regex = '''(?i)(api[_\-]?key|secret[_\-]?key|access[_\-]?token|auth[_\-]?token|private[_\-]?key)\s*[=:]\s*['"]?[a-zA-Z0-9\-_]{8,}['"]?'''
+tags = ["generic", "key"]
+
+[[rules]]
+id = "dotenv-secret"
+description = ".env style secret assignment"
+regex = '''(?i)\+?(SECRET|PASSWORD|PASSWD|TOKEN|API_KEY|PRIVATE_KEY|ACCESS_KEY|ACCESS_TOKEN|ACCESS_TOKEN_SECRET|ACCESS_SECRET)\s*=\s*.+'''
+tags = ["env", "secret"]

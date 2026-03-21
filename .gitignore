@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Build output
+remix-app/.react-router/
+remix-app/build/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Drafts (never commit unpublished content)
+remix-app/app/content/blog/_drafts/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Old project files
+old/
+
+# Editor
+.vscode/
