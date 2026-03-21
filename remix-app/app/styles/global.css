@@ -1747,4 +1747,21 @@ em {
     font-size: 0.75rem;
     line-height: 1.7;
   }
+
+  .lo-body {
+    padding: 20px 14px 24px;
+  }
+
+  .lo-banner-art {
+    font-size: 0.35rem;
+    overflow: hidden;
+  }
+
+  .lo-launch {
+    font-size: 0.68rem;
+  }
+
+  .lo-launch .lo-bar {
+    display: none;
+  }
 }
