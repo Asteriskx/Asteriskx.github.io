@@ -19,6 +19,18 @@ export const meta: MetaFunction = () => [
 
 const WORKS = [
   {
+    icon: "/assets/image/logo-v4.png",
+    iconClass: "work-icon work-icon--round",
+    year: "2018～",
+    cat: "Portfolio",
+    title: "asteriskx.net",
+    desc1: "Three.js パーティクル背景とターミナル風ログイン演出を実装した個人ポートフォリオサイト。",
+    desc2: "2026年3月に React Router v7 + SSG 構成で全面刷新。GitHub Pages にホスティング。",
+    stack: ["Three.js", "React Router v7", "TypeScript", "GitHub Pages"],
+    link: "https://github.com/Asteriskx/Asteriskx.github.io",
+    ariaLabel: "asteriskx.net GitHub",
+  },
+  {
     icon: "/assets/image/mryl.png",
     iconClass: "work-icon",
     year: "2026～",

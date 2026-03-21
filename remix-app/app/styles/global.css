@@ -1433,7 +1433,7 @@ em {
   }
 
   .work-link {
-    display: none;
+    align-self: flex-start;
   }
 
   /* ── Blog ── */
