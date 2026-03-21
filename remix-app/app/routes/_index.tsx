@@ -1,4 +1,5 @@
 import type { MetaFunction } from "react-router";
+import { useEffect, useState } from "react";
 import { ClientOnly } from "../components/ClientOnly";
 import { BgCanvas } from "../components/BgCanvas";
 import { Header } from "../components/Header";
@@ -6,6 +7,7 @@ import { HeroTerminal } from "../components/HeroTerminal";
 import { CustomCursor } from "../components/CustomCursor";
 import { BackToTop } from "../components/BackToTop";
 import { ClickFireworks } from "../components/ClickFireworks";
+import { LoginOverlay } from "../components/LoginOverlay";
 import { useScrollReveal } from "../hooks/useScrollReveal";
 import type { PostFrontmatter } from "../types";
 
@@ -98,8 +100,23 @@ const RECENT_POSTS = Object.entries(postModules)
 export default function Index() {
   useScrollReveal();
 
+  const [showLogin, setShowLogin] = useState(false);
+
+  useEffect(() => {
+    const nav = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+    const isReload = nav?.type === "reload";
+    if (!sessionStorage.getItem("lo_done") || isReload) setShowLogin(true);
+  }, []);
+
+  const handleLoginDone = () => {
+    sessionStorage.setItem("lo_done", "1");
+    setShowLogin(false);
+  };
+
   return (
     <>
+      {showLogin && <LoginOverlay onDone={handleLoginDone} />}
+
       <ClientOnly>{() => <BgCanvas />}</ClientOnly>
       <div className="bg-veil" />
       <ClientOnly>{() => <CustomCursor />}</ClientOnly>
