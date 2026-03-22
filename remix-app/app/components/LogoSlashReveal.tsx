@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const N          = 8;
 const SKEW       = 8;
+const OVERLAP    = 0.5; // サブピクセルの隙間を防ぐためストリップを微小に重ねる
 const STRIP_MS   = 450;
 const STAGGER_MS = 110;
 const TOTAL_MS   = STAGGER_MS * (N - 1) + STRIP_MS + 150;
@@ -11,7 +12,7 @@ function getStripClipPath(i: number): string {
   const w  = 100 / N;
   const x1 = w * i;
   const x2 = w * (i + 1);
-  return `polygon(${x1 - SKEW}% 0%, ${x2 - SKEW}% 0%, ${x2 + SKEW}% 100%, ${x1 + SKEW}% 100%)`;
+  return `polygon(${x1 - SKEW - OVERLAP}% 0%, ${x2 - SKEW + OVERLAP}% 0%, ${x2 + SKEW + OVERLAP}% 100%, ${x1 + SKEW - OVERLAP}% 100%)`;
 }
 
 interface Props {
@@ -24,26 +25,26 @@ export function LogoSlashReveal({ logos, intervalMs }: Props) {
   const [nextIdx, setNextIdx]       = useState<number | null>(null);
   const [leaving, setLeaving]       = useState(false);
 
+  // currentIdx を ref でも管理することで、effect の deps から外せる。
+  // deps に currentIdx があると t1 発火 → currentIdx 更新 → cleanup で t2/t3 もキャンセルされてしまうため。
+  const currentIdxRef = useRef(currentIdx);
+  currentIdxRef.current = currentIdx;
+
   useEffect(() => {
     const timer = setInterval(() => {
-      const next = (currentIdx + 1) % logos.length;
+      const next = (currentIdxRef.current + 1) % logos.length;
       setNextIdx(next);
       setLeaving(false);
 
-      // 1. 全ストリップ完成後: ベース画像を新しい src に差し替え
-      const t1 = setTimeout(() => setCurrentIdx(next), TOTAL_MS);
-
-      // 2. ベース描画後: ストリップをフェードアウト開始
-      const t2 = setTimeout(() => setLeaving(true), TOTAL_MS + 50);
-
-      // 3. フェードアウト完了後: ストリップを DOM から削除
-      const t3 = setTimeout(() => setNextIdx(null), TOTAL_MS + 50 + FADEOUT_MS);
-
-      return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+      setTimeout(() => setCurrentIdx(next), TOTAL_MS);
+      setTimeout(() => setLeaving(true), TOTAL_MS + 50);
+      setTimeout(() => setNextIdx(null), TOTAL_MS + 50 + FADEOUT_MS);
     }, intervalMs);
 
     return () => clearInterval(timer);
-  }, [currentIdx, logos.length, intervalMs]);
+  // currentIdx を deps から除外し、ref 経由で常に最新値を参照する
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logos.length, intervalMs]);
 
   return (
     <div className="slash-logo-wrap">

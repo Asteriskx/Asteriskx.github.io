@@ -1,10 +1,7 @@
 import type { MetaFunction } from "react-router";
-import { useLoaderData } from "react-router";
+import { useLoaderData, useParams } from "react-router";
 import type { Route } from "./+types/blog.$slug";
-import { ClientOnly } from "../components/ClientOnly";
-import { BgCanvas } from "../components/BgCanvas";
 import { Header } from "../components/Header";
-import { CustomCursor } from "../components/CustomCursor";
 import { BackToTop } from "../components/BackToTop";
 import type { PostFrontmatter } from "../types";
 
@@ -18,7 +15,11 @@ export async function clientLoader({ params }: Route.ClientLoaderArgs) {
   const loader = modules[key];
   if (!loader) throw new Response("Not Found", { status: 404 });
 
-  const mod = await loader();
+  // 記事が軽くても最低 500ms はローディングを見せる
+  const [mod] = await Promise.all([
+    loader(),
+    new Promise(r => setTimeout(r, 500)),
+  ]);
   return { Component: mod.default, frontmatter: mod.frontmatter };
 }
 
@@ -31,15 +32,26 @@ export const meta: MetaFunction = ({ matches }) => {
   ];
 };
 
+export function HydrateFallback() {
+  const { slug } = useParams();
+  return (
+    <div className="blog-hydrate">
+      <div className="blog-hydrate-terminal">
+        <span className="blog-hydrate-comment">// loading article...</span>
+        <span className="blog-hydrate-cmd">$ cat blog/{slug}.mdx</span>
+        <span className="blog-hydrate-progress">
+          <span className="blog-hydrate-bar" />
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function BlogPost() {
   const { Component, frontmatter } = useLoaderData<typeof clientLoader>();
 
   return (
     <>
-      <ClientOnly>{() => <BgCanvas />}</ClientOnly>
-      <div className="bg-veil" />
-      <ClientOnly>{() => <CustomCursor />}</ClientOnly>
-
       <Header />
 
       <section className="section blog-post-section">
@@ -58,6 +70,12 @@ export default function BlogPost() {
 
       <footer className="footer">
         <span className="footer-copy">&copy; 2018&ndash;2026 Asteriskx</span>
+        <nav className="footer-nav" aria-label="Footer navigation">
+          <a href="/#about">about</a>
+          <a href="/#work">work</a>
+          <a href="/blog">blog</a>
+          <a href="/#contact">contact</a>
+        </nav>
       </footer>
     </>
   );

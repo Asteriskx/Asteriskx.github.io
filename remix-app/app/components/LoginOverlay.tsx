@@ -168,15 +168,17 @@ export function LoginOverlay({ onDone }: Props) {
   // Neofetch: launch progress bar + auto-advance
   useEffect(() => {
     if (phase !== "neofetch") return;
-    let l = 0;
+    // ローカルカウンターで管理し、state は表示用にのみ使う
+    let count = 0;
     const iv = setInterval(() => {
-      setLaunch(prev => { l = prev + 1; return l; });
-      if (l >= LAUNCH_TOTAL) clearInterval(iv);
-    }, 3200 / LAUNCH_TOTAL);
+      count++;
+      setLaunch(count);
+      if (count >= LAUNCH_TOTAL) clearInterval(iv);
+    }, 2200 / LAUNCH_TOTAL);
     const t = setTimeout(() => {
       setPhase("fading");
       setTimeout(() => onDone(), 700);
-    }, 3200);
+    }, 2200);
     return () => { clearInterval(iv); clearTimeout(t); };
   }, [phase, onDone]);
 

@@ -11,22 +11,32 @@ const LOGOS = [
 function useTyped(text: string, ms: number, active: boolean, onDone: () => void) {
   const [out, setOut] = useState("");
   const done = useRef(false);
+  // onDone を ref で持ち最新参照を維持。deps に含めると active 変化のたびに
+  // effect が再実行されてタイピングがリセットされてしまうため ref 経由にする
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
+
   useEffect(() => {
     if (!active || done.current) return;
     setOut("");
     done.current = false;
     let i = 0;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
     const t = setInterval(() => {
       setOut(text.slice(0, i + 1));
       i++;
       if (i >= text.length) {
         clearInterval(t);
         done.current = true;
-        setTimeout(onDone, 180);
+        // interval 最終ティック後の setTimeout を追跡し cleanup できるようにする
+        timeoutId = setTimeout(() => onDoneRef.current(), 180);
       }
     }, ms);
-    return () => clearInterval(t);
-  }, [active]);
+    return () => {
+      clearInterval(t);
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [active, text, ms]);
   return out;
 }
 
@@ -48,6 +58,7 @@ export function HeroTerminal() {
   const [sk2, setSk2] = useState(false);
   const [sk3, setSk3] = useState(false);
   const [sk4, setSk4] = useState(false);
+  const [sk5, setSk5] = useState(false);
 
   useEffect(() => {
     if (step < 10) return;
@@ -55,7 +66,8 @@ export function HeroTerminal() {
     const t2 = setTimeout(() => setSk2(true), 220);
     const t3 = setTimeout(() => setSk3(true), 360);
     const t4 = setTimeout(() => setSk4(true), 500);
-    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); };
+    const t5 = setTimeout(() => setSk5(true), 640);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); clearTimeout(t5); };
   }, [step]);
 
   // Start sequence after mount
@@ -147,6 +159,13 @@ export function HeroTerminal() {
               )}
               {sk4 && (
                 <span className="term-skill-row">
+                  <span className="term-sk-cat">Graphics  </span>
+                  <span className="term-sk-sep"> │ </span>
+                  <span className="term-sk-val">Processing · p5.js · Three.js</span>
+                </span>
+              )}
+              {sk5 && (
+                <span className="term-skill-row">
                   <span className="term-sk-cat">Infra     </span>
                   <span className="term-sk-sep"> │ </span>
                   <span className="term-sk-val">Linux (Ubuntu · Arch · CentOS) · NW L1–L4 · サーバ構築</span>
@@ -163,7 +182,7 @@ export function HeroTerminal() {
             <span className="htag">Desktop Apps</span>
           </div>
           <a href="#work" className="hero-cta">
-            Projects <span className="cta-arrow">↓</span>
+            Work <span className="cta-arrow">↓</span>
           </a>
         </div>
 

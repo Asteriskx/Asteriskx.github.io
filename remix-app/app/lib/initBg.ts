@@ -19,7 +19,7 @@ const BG_STAR_COUNT = 80;
 
 /** 各フェーズの持続フレーム数 */
 const PHASE_DURATIONS: Record<string, number> = {
-  FLYING:    300,
+  FLYING:    120,  // 不可視フェーズ。この間に画像をロードしパーティクルをターゲットへ事前収束させる。
   GATHERING: 300,
   FORMED:    300,
 };
@@ -119,6 +119,9 @@ export function initBg(
   const camera = new THREE.OrthographicCamera(-W / 2, W / 2, H / 2, -H / 2, 0.1, 2000);
   camera.position.set(0, 0, 500);
   const scene = new THREE.Scene();
+  // タイルは RTT に入れると fadeMat による積算で想定より何倍も明るくなる。
+  // 別シーンで RTT 出力後に描画することで積算を避ける。
+  const tileScene = new THREE.Scene();
 
   // ─── マウス視差 ──────────────────────────────────────────────────────────────
 
@@ -133,6 +136,13 @@ export function initBg(
 
   let camTargetX = 0;
   let camTargetY = 0;
+
+  // ─── 雨滴波紋 ────────────────────────────────────────────────────────────────
+  // FORMED フェーズ中にランダム座標へ雨滴が落ちる衝撃をパーティクルへ与える。
+  // 複数の波を同時管理するため配列で持ち、毎フレーム強度を減衰して自然な広がりを表現する。
+  type Raindrop = { x: number; y: number; strength: number };
+  let raindrops: Raindrop[]  = [];
+  let nextRaindropTick       = 0; // 次スポーンを許可するティック
 
   // ─── アイコンターゲット管理 ──────────────────────────────────────────────────
 
@@ -313,7 +323,7 @@ export function initBg(
       vz: (Math.random() - 0.5) * 0.3,
       tx: target.x, ty: target.y, tz: 0,
       spd: 5 + Math.random() * 6,
-      sz:  0.18 + Math.random() * 0.28,
+      sz:  0.35 + Math.random() * 0.25,
     };
   }
 
@@ -321,14 +331,19 @@ export function initBg(
 
   // ─── 背景の星 ────────────────────────────────────────────────────────────────
 
-  const bgStars = Array.from({ length: BG_STAR_COUNT }, () => ({
-    x:      (Math.random() - 0.5) * W * 1.3,
-    y:      (Math.random() - 0.5) * H * 1.3,
-    z:      -300 + Math.random() * 200,
-    radius: 1.0 + Math.random() * 1.5,
-    alpha:  0.1 + Math.random() * 0.25,
-    phase:  Math.random() * Math.PI * 2,  // ゆらぎの位相
-  }));
+  const bgStars = Array.from({ length: BG_STAR_COUNT }, () => {
+    const x = (Math.random() - 0.5) * W * 1.3;
+    const y = (Math.random() - 0.5) * H * 1.3;
+    return {
+      x, y,
+      ox: x, oy: y,   // 元の位置（波紋後にスプリングで戻るための基準）
+      vx: 0, vy: 0,   // 波紋による速度
+      z:      -300 + Math.random() * 200,
+      radius: 1.0 + Math.random() * 1.5,
+      alpha:  0.30 + Math.random() * 0.45,
+      phase:  Math.random() * Math.PI * 2,
+    };
+  });
 
   // ─── GPU バッファ（パーティクル Points） ─────────────────────────────────────
 
@@ -340,7 +355,8 @@ export function initBg(
 
   const particleMat = new THREE.ShaderMaterial({
     uniforms: {
-      uFormed: { value: 0 },
+      // uPhaseT: 0.0=FLYING, 0.0→1.0=GATHERING遷移, 2.0=FORMED, 3.0=DISPERSING遷移
+      uPhaseT: { value: 0.0 },
       uMouseX: { value: 0 },
       uMouseY: { value: 0 },
       uDPR:    { value: DPR },
@@ -365,25 +381,32 @@ export function initBg(
       }
     `,
     fragmentShader: `
-      uniform int uFormed;
+      uniform float uPhaseT;
 
       void main() {
+        // FLYING フェーズは uPhaseT=-1 で渡される → パーティクル不可視
+        if (uPhaseT < 0.0) discard;
+
         vec2 uv = gl_PointCoord - 0.5;
         float r = length(uv);
         if (r > 0.5) discard;
 
+        // フェーズ別カラー定義（サイトのアクセントカラー #00e5ff に調和する碧・翠系）
+        vec3 cyan    = vec3(0.00, 0.90, 1.00); // FLYING：シアン #00e5ff
+        vec3 jade    = vec3(0.20, 1.00, 0.65); // GATHERING：翠 #33ffa6
+        vec3 emerald = vec3(0.00, 1.00, 0.55); // FORMED センター：エメラルド #00ff8c
+
         vec3  col;
         float alpha;
 
-        if (uFormed == 1) {
-          // FORMED：中心は白、周縁はシアン
-          col   = r < 0.22 ? vec3(1.0) : vec3(0.08, 0.92, 1.0);
+        if (uPhaseT >= 2.0) {
+          // FORMED：エメラルドセンター、翠エッジ
+          col   = r < 0.22 ? emerald : jade;
           alpha = r < 0.22 ? 0.95 : 0.90;
         } else {
-          // それ以外：ガウス風グラデーション
-          float glow = pow(max(0.0, 1.0 - r * 2.0), 1.4);
-          col   = mix(vec3(0.0, 0.9, 1.0), vec3(1.0), glow);
-          alpha = glow * 0.92;
+          // GATHERING：色変化を避けるため jade で統一（FORMED と同じ色味を維持）
+          col   = jade;
+          alpha = 0.90;
         }
 
         gl_FragColor = vec4(col, alpha);
@@ -492,6 +515,233 @@ export function initBg(
   const bgMesh = new THREE.Points(bgGeo, bgMat);
   scene.add(bgMesh);
 
+  // ─── 波紋リングプール ─────────────────────────────────────────────────────────
+  // FORMED フェーズ中にアイコン左の背景エリアへ拡大リングを出現させる。
+  // 単位円（半径1）をスケールで拡大し、opacity を 0.55 → 0 にフェードさせる。
+  // クリック時にもクリック位置へリングをスポーンする。
+  // 最大 8 個を事前確保してリサイクルすることで GC 負荷を抑える。
+
+  const RIPPLE_SEGS = 48;
+  const RIPPLE_MAX  = 8;
+
+  // 単位円の頂点（半径 1、z=0）。全リングで共有する読み取り専用ベース。
+  const _ringBase = new Float32Array(RIPPLE_SEGS * 3);
+  for (let i = 0; i < RIPPLE_SEGS; i++) {
+    const a = (i / RIPPLE_SEGS) * Math.PI * 2;
+    _ringBase[i * 3]     = Math.cos(a);
+    _ringBase[i * 3 + 1] = Math.sin(a);
+    _ringBase[i * 3 + 2] = 0;
+  }
+
+  interface RippleRing {
+    mesh:   THREE.LineLoop;
+    mat:    THREE.LineBasicMaterial;
+    r:      number;   // 現在の半径（px）
+    maxR:   number;   // 最終半径
+    active: boolean;
+  }
+
+  const rippleRings: RippleRing[] = Array.from({ length: RIPPLE_MAX }, () => {
+    const geo  = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(_ringBase.slice(), 3));
+    const mat  = new THREE.LineBasicMaterial({
+      color:       new THREE.Color(0x33ffa6), // jade
+      transparent: true,
+      opacity:     0,
+      blending:    THREE.AdditiveBlending, // 加算合成でアイコンを絶対に隠さない
+      depthTest:   false,
+      depthWrite:  false,
+    });
+    const mesh = new THREE.LineLoop(geo, mat);
+    mesh.visible = false;
+    scene.add(mesh);
+    return { mesh, mat, r: 0, maxR: 100, active: false };
+  });
+
+
+  /** 指定ワールド座標にリングをスポーンする（プール空きがなければスキップ） */
+  function spawnRipple(worldX: number, worldY: number) {
+    const free = rippleRings.find(r => !r.active);
+    if (!free) return;
+    free.r    = 0;
+    free.maxR = 60 + Math.random() * 80;
+    free.mesh.position.set(worldX, worldY, 20);
+    free.mesh.visible = true;
+    free.active       = true;
+  }
+
+  // クリック位置（スクリーン座標 → ワールド座標変換）でリングをスポーン
+  // FORMED フェーズ以外はスキップ
+  const onRippleClick = (e: MouseEvent) => {
+    const wx = e.clientX - W / 2;
+    const wy = H / 2 - e.clientY;
+    spawnRipple(wx, wy);
+  };
+  window.addEventListener("click", onRippleClick, { passive: true });
+
+  // ─── タイルフリップ ───────────────────────────────────────────────────────────
+  // 全画面をタイルグリッドで覆い、左上から波状にカードフリップするアニメーション。
+  // 裏面にバイナリ海に浮かぶアスタリスク（＊）のピクセルアートを表示。
+  // アイコンエリアに重なるタイルは alpha を下げてパーティクルを透かす。
+  // InstancedMesh + カスタムシェーダーで全タイルを 1 描画コールで処理する。
+
+  const TILE_SIZE  = Math.round(Math.min(W, H) / 28);
+  const TILE_COLS  = Math.ceil(W / TILE_SIZE) + 1;
+  const TILE_ROWS  = Math.ceil(H / TILE_SIZE) + 1;
+  const TILE_COUNT = TILE_COLS * TILE_ROWS;
+
+  // ＊の形: 水平・垂直・45° 対角線の交差（Chebyshev 距離で半径制限）
+  // 小さめの半径で動的に移動するアスタリスクを表現する
+  const AST_RADIUS = Math.max(3, Math.floor(Math.min(TILE_COLS, TILE_ROWS) * 0.12));
+  let astCenterCol = Math.floor(TILE_COLS / 2);
+  let astCenterRow = Math.floor(TILE_ROWS / 2);
+  let astPhaseT    = 0; // ドリフト位相（毎サイクル加算）
+
+  // per-instance バッファ
+  const tileFlipAngles = new Float32Array(TILE_COUNT); // 各タイルの現在角度 (0→π)
+  const tileDelays     = new Float32Array(TILE_COUNT); // 波の遅延（中心=0, 外周=1）
+  const tileIsAsterisk = new Float32Array(TILE_COUNT);
+  const tileAlphas     = new Float32Array(TILE_COUNT);
+  const tileIdxArr     = new Float32Array(TILE_COUNT);
+
+  // tileIdxArr はシェーダーのハッシュ用で不変
+  for (let i = 0; i < TILE_COUNT; i++) tileIdxArr[i] = i;
+
+  // アスタリスク中心を更新し関連バッファを再計算する。
+  // 毎フリップサイクルの開始時に呼び出し、毎回異なる位置に ＊ を表示する。
+  function refreshAsterisk(newCol: number, newRow: number) {
+    // グリッド端からはみ出さないようクランプ
+    astCenterCol = Math.max(AST_RADIUS, Math.min(TILE_COLS - 1 - AST_RADIUS, newCol));
+    astCenterRow = Math.max(AST_RADIUS, Math.min(TILE_ROWS - 1 - AST_RADIUS, newRow));
+    const maxDist = Math.sqrt(TILE_COLS ** 2 + TILE_ROWS ** 2);
+    for (let row = 0; row < TILE_ROWS; row++) {
+      for (let col = 0; col < TILE_COLS; col++) {
+        const i  = row * TILE_COLS + col;
+        const dx = col - astCenterCol;
+        const dy = row - astCenterRow;
+        // ＊ 判定: 水平・垂直・45° 対角の交差
+        const isAst = Math.max(Math.abs(dx), Math.abs(dy)) <= AST_RADIUS &&
+                      (dy === 0 || dx === 0 || Math.abs(dx) === Math.abs(dy));
+        tileIsAsterisk[i] = isAst ? 1.0 : 0.0;
+        // 波の遅延: アスタリスク中心からの距離ベース（中心=0 → 外周=1 の放射波）
+        tileDelays[i] = Math.sqrt(dx * dx + dy * dy) / maxDist;
+        // アイコンエリア境界から左へグラデーションで alpha を落とす。
+        // アイコンエリア内（右側）は 0.0 で完全非表示。境界左 3 タイル分でフェード。
+        // 全タイル均一 alpha（パーティクルエリアも含めて四角を表示する）
+        tileAlphas[i] = 0.50;
+      }
+    }
+    tileAstAttr.needsUpdate   = true;
+    tileAlphaAttr.needsUpdate = true;
+  }
+
+  const tileGeo = new THREE.PlaneGeometry(TILE_SIZE - 2, TILE_SIZE - 2);
+  const tileMat = new THREE.ShaderMaterial({
+    vertexShader: `
+      attribute float aFlipAngle;
+      attribute float aIsAsterisk;
+      attribute float aAlpha;
+      attribute float aTileIdx;
+      varying   float vIsAsterisk;
+      varying   float vAlpha;
+      varying   float vCosA;    // fragment でフェード計算するために渡す
+      varying   float vTileIdx;
+
+      void main() {
+        // ローカル Y 軸周りにフリップ（PlaneGeometry の x 方向を回転）
+        float cosA   = cos(aFlipAngle);
+        float sinA   = sin(aFlipAngle);
+        vec3  pos    = vec3(position.x * cosA, position.y, -position.x * sinA);
+        gl_Position  = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(pos, 1.0);
+        vIsAsterisk  = aIsAsterisk;
+        vAlpha       = aAlpha;
+        vCosA        = cosA;
+        vTileIdx     = aTileIdx;
+      }
+    `,
+    fragmentShader: `
+      varying float vIsAsterisk;
+      varying float vAlpha;
+      varying float vCosA;
+      varying float vTileIdx;
+
+      void main() {
+        // cosA > 0 → 表面。1 - smoothstep(lo, hi, x) で 90° 付近をなめらかにフェード。
+        // edge0 < edge1 を守らないと GLSL 未定義動作でちらつきの原因になる。
+        float faceMask = 1.0 - smoothstep(-0.12, 0.0, vCosA); // cosA<-0.12→1, cosA>0→0
+        if (faceMask < 0.01) discard;
+
+        float alpha;
+        vec3  col;
+        if (vIsAsterisk > 0.5) {
+          // アスタリスクタイル：明るいシアン白で発光感を演出（AdditiveBlending で自然にグロー）
+          col   = vec3(0.75, 0.97, 1.0);
+          alpha = 0.55 * vAlpha * faceMask;
+        } else {
+          // バイナリ風：インデックスをハッシュして 0/1 の濃淡（jade グリーン）
+          col         = vec3(0.20, 1.00, 0.65);
+          float h     = fract(sin(vTileIdx * 127.1 + 43.0) * 43758.5);
+          alpha       = (h > 0.5 ? 0.20 : 0.08) * vAlpha * faceMask;
+        }
+        gl_FragColor = vec4(col, alpha);
+      }
+    `,
+    transparent: true,
+    blending:    THREE.AdditiveBlending,
+    depthTest:   false,
+    depthWrite:  false,
+    side:        THREE.DoubleSide,
+  });
+
+  const tileMesh = new THREE.InstancedMesh(tileGeo, tileMat, TILE_COUNT);
+  const _tMat4   = new THREE.Matrix4();
+  for (let row = 0; row < TILE_ROWS; row++) {
+    for (let col = 0; col < TILE_COLS; col++) {
+      const i  = row * TILE_COLS + col;
+      const wx = (col + 0.5) * TILE_SIZE - W / 2;
+      const wy = H / 2 - (row + 0.5) * TILE_SIZE;
+      _tMat4.setPosition(wx, wy, -80); // bgStars より奥
+      tileMesh.setMatrixAt(i, _tMat4);
+    }
+  }
+  tileMesh.instanceMatrix.needsUpdate = true;
+  tileScene.add(tileMesh);
+
+  const tileFlipAttr  = new THREE.InstancedBufferAttribute(tileFlipAngles, 1);
+  const tileAstAttr   = new THREE.InstancedBufferAttribute(tileIsAsterisk, 1);
+  const tileAlphaAttr = new THREE.InstancedBufferAttribute(tileAlphas,     1);
+  const tileIdxAttr   = new THREE.InstancedBufferAttribute(tileIdxArr,     1);
+  tileGeo.setAttribute("aFlipAngle",  tileFlipAttr);
+  tileGeo.setAttribute("aIsAsterisk", tileAstAttr);
+  tileGeo.setAttribute("aAlpha",      tileAlphaAttr);
+  tileGeo.setAttribute("aTileIdx",    tileIdxAttr);
+
+  // アスタリスクの有効 col 範囲を左背景エリアに制限する。
+  // icon エリア（右側, tileAlphas=0）にドリフトすると ＊ が見えなくなるため。
+  // 腕の長さ（AST_RADIUS + 2 タイル余裕）分だけ境界手前を上限とする。
+  const _iconLeft     = ICON_OFFSET_X - ICON_SIZE * 0.5;
+  const astColMax     = Math.max(AST_RADIUS + 1,
+    Math.floor((_iconLeft - TILE_SIZE * (AST_RADIUS + 2) + W / 2) / TILE_SIZE));
+  const astColMin     = AST_RADIUS + 1;
+  const astColMid     = (astColMax + astColMin) / 2;
+  const astColAmp     = (astColMax - astColMin) / 2;
+
+  // 初回配置（左背景エリアの中央に配置）
+  refreshAsterisk(Math.floor(astColMid), Math.floor(TILE_ROWS / 2));
+
+  // バイナリ四角は常時表示。全タイルを π（裏面）で初期化し、
+  // WAVE_IN のタイミングでアスタリスクタイルのみ 0 → π にアニメーションさせる。
+  tileFlipAngles.fill(Math.PI);
+  tileFlipAttr.needsUpdate = true;
+
+  // フリップアニメーション状態管理（HOLD ↔ WAVE_IN の 2 フェーズ）
+  // string 型にすることで TypeScript の過剰な narrowing を防ぐ
+  let tileAnimPhase = "HOLD";
+  let tileAnimTimer = 0;
+  const T_WAVE   = 70;  // 波が端まで伝わるフレーム数（約 1.2 秒）
+  const T_SINGLE = 18;  // 1 枚が π まで回転するフレーム数
+  const T_HOLD   = 150; // アスタリスク表示の保持フレーム数（約 2.5 秒）
+
   // ─── フェーズ管理 ────────────────────────────────────────────────────────────
 
   let phaseIndex = 0;
@@ -500,7 +750,7 @@ export function initBg(
 
   /** フェーズを次へ進め、必要な状態リセットを行う */
   function advancePhase() {
-    // FLYING 開始時にアイコンがなければ円を使用
+    // FLYING 開始時にアイコンがなければ円を使用（FLYING を再度踏む場合の保険）
     if (phase === "FLYING" && iconTargets.length === 0) {
       iconTargets = buildCircleTargets();
       iconCycle   = 0;
@@ -510,6 +760,7 @@ export function initBg(
     // FORMED 終了後は FLYING をスキップして直接 GATHERING へ
     if (phase === "FORMED") {
       phaseIndex = PHASES.indexOf("GATHERING");
+      raindrops  = []; // フェーズ切り替え時に残存波紋をクリア
     } else {
       phaseIndex = (phaseIndex + 1) % PHASES.length;
     }
@@ -544,16 +795,12 @@ export function initBg(
   // ─── パーティクル物理 ─────────────────────────────────────────────────────────
 
   function updateParticleFlying(p: Particle) {
-    p.vx += (Math.random() - 0.5) * 0.018;
-    p.vy += (Math.random() - 0.5) * 0.018;
-    p.vz += (Math.random() - 0.5) * 0.008;
-    p.vx *= 0.985; p.vy *= 0.985; p.vz *= 0.985;
-    p.x  += p.vx;  p.y  += p.vy;  p.z  += p.vz;
-
-    // 画面外に出たら反対側から再出現（ラップアラウンド）
-    if (p.x < -W / 2) p.x += W; else if (p.x > W / 2) p.x -= W;
-    if (p.y < -H / 2) p.y += H; else if (p.y > H / 2) p.y -= H;
-    if (Math.abs(p.z) > 250) p.vz *= -1;
+    // FLYING は不可視フェーズ。ランダム飛散させず、静かにターゲットへ収束させておく。
+    // 画像ロードが完了すると assignTargets() でターゲットが更新されるため、
+    // 120 フレーム後に GATHERING 開始時にはパーティクルがほぼ所定位置に到達している。
+    p.x += (p.tx - p.x) * 0.06;
+    p.y += (p.ty - p.y) * 0.06;
+    p.z += (0    - p.z) * 0.06;
   }
 
   function updateParticleGathering(p: Particle, progress: number) {
@@ -561,23 +808,46 @@ export function initBg(
     const prevX = p.x;
     const prevY = p.y;
 
-    p.x  += (p.tx - p.x) * lerpT;
-    p.y  += (p.ty - p.y) * lerpT;
-    p.z  += (p.tz - p.z) * lerpT;
-    p.vx  = p.x - prevX;
-    p.vy  = p.y - prevY;
+    const dx   = p.tx - p.x;
+    const dy   = p.ty - p.y;
+    const dist = Math.hypot(dx, dy) || 1;
+
+    // 螺旋成分：目標方向に垂直な速度を加え銀河の腕のような軌跡を生む。
+    // progress が増すにつれ螺旋が消えて収束する。
+    const spiralStrength = Math.max(0, 1.0 - progress * 1.5) * 0.12;
+    const perpX = -dy / dist;
+    const perpY =  dx / dist;
+
+    p.x += (p.tx - p.x) * lerpT + perpX * Math.min(dist, 80) * spiralStrength;
+    p.y += (p.ty - p.y) * lerpT + perpY * Math.min(dist, 80) * spiralStrength;
+    p.z += (p.tz - p.z) * lerpT;
+    p.vx = p.x - prevX;
+    p.vy = p.y - prevY;
   }
 
-  function updateParticleFormed(p: Particle) {
+  function updateParticleFormed(p: Particle, currentTick: number) {
     const dx   = p.tx - p.x;
     const dy   = p.ty - p.y;
     const dz   = p.tz - p.z;
     const dist = Math.hypot(dx, dy, dz) || 1;
     const sp   = Math.min(dist * 0.22, 4);
 
-    p.vx += ((dx / dist) * sp - p.vx) * 0.25;
-    p.vy += ((dy / dist) * sp - p.vy) * 0.25;
-    p.vz += ((dz / dist) * sp - p.vz) * 0.25;
+    // 固有位相：tx/ty から決まる定数なのでパーティクルごとに異なる動きになる
+    const ownPhase = (p.tx * 0.07 + p.ty * 0.05) % (Math.PI * 2);
+
+    // 脈動：目標方向への速度を sin で揺らす
+    const pulse = Math.sin(currentTick * 0.04 + ownPhase) * 0.8;
+
+    // ダンプを 0.25 → 0.18 に緩めることで、GATHERING 終了直後に
+    // 速度がピタッと止まるのを防ぐ。見た目の動き量は元とほぼ同じ。
+    // 極小のドリフト力で完全静止しない程度の揺らぎを持続させる。
+    const driftAngle = currentTick * 0.008 + ownPhase;
+    const driftX = Math.cos(driftAngle) * 0.02;
+    const driftY = Math.sin(driftAngle) * 0.02;
+
+    p.vx += ((dx / dist) * (sp + pulse) - p.vx) * 0.18 + driftX;
+    p.vy += ((dy / dist) * (sp + pulse) - p.vy) * 0.18 + driftY;
+    p.vz += ((dz / dist) * sp - p.vz) * 0.18;
     p.vx += (Math.random() - 0.5) * 0.5;
     p.vy += (Math.random() - 0.5) * 0.5;
     p.x  += p.vx; p.y += p.vy; p.z += p.vz;
@@ -612,7 +882,8 @@ export function initBg(
 
   // ─── トレイル書き込み ─────────────────────────────────────────────────────────
 
-  function writeTrail(p: Particle, i: number, velocity: number) {
+  // colorT: 0=シアン, 1=パープル（GATHERING→DISPERSING のフェーズ進行に連動）
+  function writeTrail(p: Particle, i: number, velocity: number, colorT: number) {
     const TRAIL_LENGTH_SCALE = 2.2;
     const TRAIL_MAX_LENGTH   = 36;
     const trailLen = Math.min(velocity * TRAIL_LENGTH_SCALE, TRAIL_MAX_LENGTH);
@@ -621,11 +892,14 @@ export function initBg(
     const ny = p.vy / invVel;
     const nz = p.vz / invVel;
 
-    // 始点（テール側：透明・シアン）
+    // 始点（テール側）：シアン→翠をブレンド
+    const tr = 0.20 * colorT;
+    const tg = 0.9  + 0.10 * colorT;
+    const tb = 1.0  - 0.35 * colorT;
     trailPosArr[i * 6]     = p.x - nx * trailLen;
     trailPosArr[i * 6 + 1] = p.y - ny * trailLen;
     trailPosArr[i * 6 + 2] = p.z - nz * trailLen;
-    trailColArr[i * 6]     = 0;   trailColArr[i * 6 + 1] = 0.9; trailColArr[i * 6 + 2] = 1.0;
+    trailColArr[i * 6]     = tr; trailColArr[i * 6 + 1] = tg; trailColArr[i * 6 + 2] = tb;
     trailAlpArr[i * 2]     = 0;
 
     // 終点（ヘッド側：不透明・白）
@@ -663,11 +937,8 @@ export function initBg(
 
     const progress = phaseTimer / PHASE_DURATIONS[phase];
 
-    // トレイルのフェード量をフェーズに応じて調整
-    fadeMat.opacity =
-      phase === "FORMED"     ? 0.06 :
-      phase === "GATHERING"  ? 0.20 :
-      phase === "DISPERSING" ? 0.28 : 0.12;
+    // RTT トレイルのフェード量。全フェーズ統一で色の濃さを均一に保つ。
+    fadeMat.opacity = 0.12;
 
     // カメラの視差スムーシング
     camTargetX += (mouseNX * 22 - camTargetX) * 0.04;
@@ -676,14 +947,30 @@ export function initBg(
     camera.position.y = camTargetY;
 
     // ユニフォーム更新
-    (particleMat.uniforms.uFormed as { value: number }).value = phase === "FORMED" ? 1 : 0;
+    // uPhaseT: FLYING=-1（不可視）, GATHERING=0→1, FORMED=2, DISPERSING=3→2（逆進）
+    // FLYING は散布状態を見せないため -1 を渡し fragment shader 側で discard する。
+    const uPhaseT =
+      phase === "FORMED"     ? 2.0 :
+      phase === "GATHERING"  ? progress :
+      phase === "DISPERSING" ? 2.0 - progress :
+      /* FLYING */             -1.0;
+    (particleMat.uniforms.uPhaseT as { value: number }).value = uPhaseT;
     (particleMat.uniforms.uMouseX as { value: number }).value = mouseNX;
     (particleMat.uniforms.uMouseY as { value: number }).value = mouseNY;
     (bgMat.uniforms.uMouseX       as { value: number }).value = mouseNX;
+
     (bgMat.uniforms.uMouseY       as { value: number }).value = mouseNY;
 
-    // 背景星のゆらぎ更新
+    // 背景星のゆらぎ更新 + 波紋スプリング
     bgStars.forEach((star, i) => {
+      // 波紋で動いた分を元の位置へ引き戻すスプリング力
+      star.vx += (star.ox - star.x) * 0.02;
+      star.vy += (star.oy - star.y) * 0.02;
+      star.vx *= 0.88;
+      star.vy *= 0.88;
+      star.x  += star.vx;
+      star.y  += star.vy;
+
       const animAlpha = star.alpha * (0.5 + 0.5 * Math.sin(tick * 0.016 + star.phase));
       bgPosBuf[i * 3]     = star.x;
       bgPosBuf[i * 3 + 1] = star.y;
@@ -695,6 +982,93 @@ export function initBg(
     bgGeo.attributes["aSize"].needsUpdate    = true;
     bgGeo.attributes["aAlpha"].needsUpdate   = true;
 
+    // ─── 波紋リング更新（クリックトリガーのみ）──────────────────────────────────
+    rippleRings.forEach(ring => {
+      if (!ring.active) return;
+      ring.r += 0.9;
+      const t          = ring.r / ring.maxR;             // 0→1（進捗）
+      ring.mat.opacity = 0.55 * Math.pow(1 - t, 1.5);   // ease-out フェード
+      ring.mesh.scale.setScalar(ring.r);
+      if (ring.r >= ring.maxR) {
+        ring.active       = false;
+        ring.mesh.visible = false;
+        ring.mat.opacity  = 0;
+      }
+    });
+
+    // ─── タイルフリップ更新 ──────────────────────────────────────────────────────
+    tileAnimTimer++;
+    // TS の過剰 narrowing を防ぐためスナップショットを使用
+    const _tp = tileAnimPhase;
+
+    if (_tp === "HOLD" && tileAnimTimer > T_HOLD) {
+      // アスタリスクを Lissajous 軌跡でドリフト（左背景エリア内に制限）
+      astPhaseT += 0.8;
+      const newCol = Math.floor(astColMid + Math.sin(astPhaseT)       * astColAmp);
+      const newRow = Math.floor(TILE_ROWS / 2 + Math.cos(astPhaseT * 0.7) * TILE_ROWS * 0.3);
+      refreshAsterisk(newCol, newRow);
+      // 新しいアスタリスクタイルを 0 にリセット（WAVE_IN でフリップイン）
+      // 非アスタリスクタイルは常時 π（バイナリ常時表示）
+      for (let i = 0; i < TILE_COUNT; i++) {
+        tileFlipAngles[i] = tileIsAsterisk[i] > 0.5 ? 0 : Math.PI;
+      }
+      tileFlipAttr.needsUpdate = true;
+      tileAnimPhase = "WAVE_IN"; tileAnimTimer = 0;
+    }
+    else if (_tp === "WAVE_IN" && tileAnimTimer > T_WAVE + T_SINGLE) {
+      tileAnimPhase = "HOLD"; tileAnimTimer = 0;
+    }
+
+    // WAVE_IN 中はアスタリスクタイルのみ 0 → π にアニメーション
+    // 非アスタリスクタイルは π のまま（毎フレーム書き直さない）
+    if (tileAnimPhase === "WAVE_IN") {
+      let changed = false;
+      for (let i = 0; i < TILE_COUNT; i++) {
+        if (tileIsAsterisk[i] > 0.5 && tileFlipAngles[i] < Math.PI) {
+          const t = Math.max(0, Math.min(1, (tileAnimTimer - tileDelays[i] * T_WAVE) / T_SINGLE));
+          tileFlipAngles[i] = t * Math.PI;
+          changed = true;
+        }
+      }
+      if (changed) tileFlipAttr.needsUpdate = true;
+    }
+
+    // ─── 雨滴スポーン（FORMED フェーズのみ）────────────────────────────────────
+    // 300〜600ms ランダム間隔で画面全体のランダム座標へ雨滴を落とす。
+    // bgStars（背景星）に衝撃を与えるので、アイコン領域除外は不要。
+    if (phase === "FORMED" && tick >= nextRaindropTick && raindrops.length < 5) {
+      raindrops.push({
+        x:        (Math.random() - 0.5) * W,
+        y:        (Math.random() - 0.5) * H,
+        strength: 0.8 + Math.random() * 0.7,
+      });
+      // 次スポーンまで 300〜600ms（60fps 換算: 18〜36 tick）
+      nextRaindropTick = tick + 18 + Math.floor(Math.random() * 18);
+    }
+
+    // ─── 雨滴の物理を bgStars へ適用＋減衰 ──────────────────────────────────
+    // アイコンパーティクルはノータッチ。bgStars（背景星）だけに衝撃を与えることで
+    // 水面に雨が落ちるような波紋を表現する。
+    // wd は OrthographicCamera のためスクリーンピクセル単位。
+    // 力を大きくしないと星が小さく見た目に変化が出ないため * 40 で増幅。
+    if (raindrops.length > 0) {
+      bgStars.forEach(star => {
+        raindrops.forEach(drop => {
+          const wx    = star.x - drop.x;
+          const wy    = star.y - drop.y;
+          const wd    = Math.hypot(wx, wy) || 1;
+          // 近距離での爆発的な力を抑えるため上限 5 でクランプ
+          const force = Math.min((drop.strength * 40) / (wd * 0.03 + 1), 5);
+          star.vx += (wx / wd) * force;
+          star.vy += (wy / wd) * force;
+        });
+      });
+      raindrops = raindrops.filter(drop => {
+        drop.strength *= 0.97;
+        return drop.strength > 0.05;
+      });
+    }
+
     // パーティクル物理演算 + バッファ書き込み
     const showTrails = phase === "GATHERING" || phase === "DISPERSING";
     const MIN_TRAIL_VELOCITY = 1.5;
@@ -702,7 +1076,7 @@ export function initBg(
     particles.forEach((p, i) => {
       if      (phase === "FLYING")     updateParticleFlying(p);
       else if (phase === "GATHERING")  updateParticleGathering(p, progress);
-      else if (phase === "FORMED")     updateParticleFormed(p);
+      else if (phase === "FORMED")     updateParticleFormed(p, tick);
       else                             updateParticleDispersing(p, progress);
 
       // 位置・サイズをバッファに書き込み
@@ -710,13 +1084,14 @@ export function initBg(
       particlePosArr[i * 3]     = p.x;
       particlePosArr[i * 3 + 1] = p.y;
       particlePosArr[i * 3 + 2] = p.z;
-      particleSizeArr[i] = phase === "FORMED"
-        ? p.sz * 2.2
-        : Math.max(0.5, (p.sz * 3.5 + velocity * 0.3) * 2);
+      // フェーズ問わず均一サイズ。velocity ボーナスは視覚的にアンバランスになるため除去。
+      particleSizeArr[i] = p.sz * 4.0;
 
       // トレイルの書き込み（速度が一定以上の場合のみ表示）
+      // GATHERING は progress に連動してシアン→パープル、DISPERSING は逆進
+      const trailColorT = phase === "GATHERING" ? progress : phase === "DISPERSING" ? 1.0 - progress : 0.0;
       if (showTrails && velocity > MIN_TRAIL_VELOCITY) {
-        writeTrail(p, i, velocity);
+        writeTrail(p, i, velocity, trailColorT);
       } else {
         clearTrail(i);
       }
@@ -749,7 +1124,10 @@ export function initBg(
     outMat.map = rtA.texture;
     renderer.render(outScene, screenCam);
 
-    // 6. RT をスワップ（rtB が次フレームの「前フレーム」になる）
+    // 6. タイルを RTT 出力の上に描画（RTT 積算を避けつつパーティクルの前に乗せる）
+    renderer.render(tileScene, camera);
+
+    // 7. RT をスワップ（rtB が次フレームの「前フレーム」になる）
     [rtA, rtB] = [rtB, rtA];
   })();
 
@@ -784,8 +1162,16 @@ export function initBg(
 
   return () => {
     cancelAnimationFrame(animId);
-    window.removeEventListener("resize", onResize);
+    window.removeEventListener("resize",  onResize);
     document.removeEventListener("mousemove", onMouseMove);
+
+    window.removeEventListener("click", onRippleClick);
+    tileGeo.dispose();
+    tileMat.dispose();
+    rippleRings.forEach(ring => {
+      ring.mesh.geometry.dispose();
+      ring.mat.dispose();
+    });
     renderer.dispose();
     rtA.dispose();
     rtB.dispose();

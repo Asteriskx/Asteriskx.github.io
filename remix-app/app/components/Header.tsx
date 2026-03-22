@@ -30,17 +30,22 @@ export function Header() {
   const sectionHref = (id: string) => isHome ? `#${id}` : `/#${id}`;
 
   // Header typewriter
+  // setTimeout 内の setInterval は useEffect の cleanup に届かないため、
+  // interval を外側の変数で持ち、両方を cleanup で確実にクリアする
   useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | null = null;
     const timeout = setTimeout(() => {
       let i = 0;
-      const interval = setInterval(() => {
+      interval = setInterval(() => {
         setTitleText(TITLE.slice(0, i + 1));
         i++;
-        if (i >= TITLE.length) clearInterval(interval);
+        if (i >= TITLE.length) clearInterval(interval!);
       }, 90);
-      return () => clearInterval(interval);
     }, 200);
-    return () => clearTimeout(timeout);
+    return () => {
+      clearTimeout(timeout);
+      if (interval) clearInterval(interval);
+    };
   }, []);
 
   // Scroll shrink

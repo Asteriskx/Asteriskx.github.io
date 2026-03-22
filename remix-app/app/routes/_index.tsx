@@ -1,13 +1,8 @@
 import type { MetaFunction } from "react-router";
-import { useEffect, useState } from "react";
 import { ClientOnly } from "../components/ClientOnly";
-import { BgCanvas } from "../components/BgCanvas";
 import { Header } from "../components/Header";
 import { HeroTerminal } from "../components/HeroTerminal";
-import { CustomCursor } from "../components/CustomCursor";
 import { BackToTop } from "../components/BackToTop";
-import { ClickFireworks } from "../components/ClickFireworks";
-import { LoginOverlay } from "../components/LoginOverlay";
 import { useScrollReveal } from "../hooks/useScrollReveal";
 import type { PostFrontmatter } from "../types";
 
@@ -17,7 +12,21 @@ export const meta: MetaFunction = () => [
 
 // ─── Works ───────────────────────────────────────────────────────────────────
 
-const WORKS = [
+interface Work {
+  icon: string;
+  iconClass: string;
+  year: string;
+  cat: string;
+  title: string;
+  desc1: string;
+  desc2: string;
+  stack: string[];
+  link: string;
+  ariaLabel: string;
+  featured: boolean;
+}
+
+const WORKS: Work[] = [
   {
     icon: "/assets/image/logo-v4.png",
     iconClass: "work-icon work-icon--round",
@@ -29,6 +38,7 @@ const WORKS = [
     stack: ["Three.js", "React Router v7", "TypeScript", "GitHub Pages"],
     link: "https://github.com/Asteriskx/Asteriskx.github.io",
     ariaLabel: "asteriskx.net GitHub",
+    featured: true,
   },
   {
     icon: "/assets/image/mryl.png",
@@ -41,6 +51,7 @@ const WORKS = [
     stack: ["Python", "C", "GCC", "Cygwin"],
     link: "https://github.com/Mryl-Dev/Mryl",
     ariaLabel: "Mryl GitHub",
+    featured: true,
   },
   {
     icon: "/assets/image/mryl.png",
@@ -53,6 +64,7 @@ const WORKS = [
     stack: ["Python", "TypeScript", "VSCode API"],
     link: "https://github.com/Mryl-Dev/myrl-analyzer",
     ariaLabel: "Mryl Analyzer GitHub",
+    featured: false,
   },
   {
     icon: "/assets/image/sagiri-nowplaying.png",
@@ -65,6 +77,7 @@ const WORKS = [
     stack: ["C#", ".NET 9", "WPF", "Prism", "ReactiveProperty", "Selenium"],
     link: "https://github.com/Sagiri-Dev/Sagiri",
     ariaLabel: "Sagiri NowPlaying GitHub",
+    featured: true,
   },
   {
     icon: "/assets/image/legato.png",
@@ -73,10 +86,11 @@ const WORKS = [
     cat: "Library",
     title: "Legato",
     desc1: "AIMP4 の再生曲を Twitter / Misskey へ投稿できる C# 製ラッパーライブラリ。",
-    desc2: "派生アプリの基盤として機能する。",
+    desc2: "プロジェクト立ち上げ後、まりはち氏が合流。派生アプリの基盤として機能する。",
     stack: ["C#", "WinForms", ".NET Standard"],
     link: "https://github.com/Legato-Dev/Legato",
     ariaLabel: "Legato GitHub",
+    featured: false,
   },
   {
     icon: "/assets/image/legato.png",
@@ -89,6 +103,7 @@ const WORKS = [
     stack: ["C#", "WinForms", ".NET Standard"],
     link: "https://github.com/Legato-Dev/Legato-NowPlaying",
     ariaLabel: "Legato NowPlaying GitHub",
+    featured: false,
   },
 ];
 
@@ -112,28 +127,8 @@ const RECENT_POSTS = Object.entries(postModules)
 export default function Index() {
   useScrollReveal();
 
-  const [showLogin, setShowLogin] = useState(false);
-
-  useEffect(() => {
-    const nav = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
-    const isReload = nav?.type === "reload";
-    if (!sessionStorage.getItem("lo_done") || isReload) setShowLogin(true);
-  }, []);
-
-  const handleLoginDone = () => {
-    sessionStorage.setItem("lo_done", "1");
-    setShowLogin(false);
-  };
-
   return (
     <>
-      {showLogin && <LoginOverlay onDone={handleLoginDone} />}
-
-      <ClientOnly>{() => <BgCanvas />}</ClientOnly>
-      <div className="bg-veil" />
-      <ClientOnly>{() => <CustomCursor />}</ClientOnly>
-      <ClientOnly>{() => <ClickFireworks />}</ClientOnly>
-
       <Header />
 
       {/* 01. About / Hero */}
@@ -156,14 +151,20 @@ export default function Index() {
         </div>
         <div className="work-list">
           {WORKS.map((w) => (
-            <article key={w.title} className="work-item reveal">
+            <article
+              key={w.title}
+              className={`work-item reveal${w.featured ? " work-item--featured" : ""}`}
+            >
               <img src={w.icon} alt={w.title} className={w.iconClass} />
               <div className="work-meta">
                 <span className="work-year">{w.year}</span>
                 <span className="work-cat">{w.cat}</span>
               </div>
               <div className="work-body">
-                <h3 className="work-title">{w.title}</h3>
+                <h3 className="work-title">
+                  {w.title}
+                  {w.featured && <span className="work-featured-badge">featured</span>}
+                </h3>
                 <p className="work-desc">{w.desc1}</p>
                 <p className="work-desc">{w.desc2}</p>
                 <div className="work-stack">
@@ -194,7 +195,11 @@ export default function Index() {
         </div>
         <div className="blog-recent">
           {RECENT_POSTS.length === 0 ? (
-            <p className="blog-empty reveal">記事はまだありません。</p>
+            <div className="blog-empty reveal">
+              <span className="blog-empty-comment">// no posts yet</span>
+              <span className="blog-empty-cmd">$ git log --oneline blog/</span>
+              <span className="blog-empty-comment">// fatal: your branch has no history</span>
+            </div>
           ) : (
             RECENT_POSTS.map((post) => (
               <article key={post.slug} className="blog-card reveal">
@@ -256,6 +261,12 @@ export default function Index() {
 
       <footer className="footer">
         <span className="footer-copy">&copy; 2018&ndash;2026 Asteriskx</span>
+        <nav className="footer-nav" aria-label="Footer navigation">
+          <a href="#about">about</a>
+          <a href="#work">work</a>
+          <a href="#blog">blog</a>
+          <a href="#contact">contact</a>
+        </nav>
       </footer>
     </>
   );
