@@ -1,16 +1,32 @@
 import { useEffect, useRef } from "react";
 
+/** クリック1回で生成するスパーク数 */
 const PARTICLE_COUNT = 14;
 const COLORS = ["#00e5ff", "#ffffff", "#7ecfdd", "#00bcd4", "#e0f7fa"];
 
+/** クリック爆発エフェクトの1パーティクル */
 interface Spark {
-  x: number; y: number;
-  vx: number; vy: number;
+  /** 現在の X 座標（px） */
+  x: number;
+  /** 現在の Y 座標（px） */
+  y: number;
+  /** X 方向の速度（px/frame）。毎フレーム 0.97 倍で減衰する */
+  vx: number;
+  /** Y 方向の速度（px/frame）。毎フレーム重力（+0.06）と 0.97 倍の減衰が加算される */
+  vy: number;
+  /** 不透明度（0〜1）。毎フレーム 0.93 倍でフェードアウトし、0.02 以下で削除される */
   alpha: number;
+  /** 円の半径（px） */
   radius: number;
+  /** 描画色（16進カラー文字列） */
   color: string;
 }
 
+/**
+ * クリック位置でパーティクルが爆散するエフェクトコンポーネント。
+ * 全画面固定の透過キャンバスに Canvas 2D で描画し、pointer-events: none で操作を透過する。
+ * 重力・空気抵抗・フェードアウトをシミュレートし、alpha が 0.02 以下の Spark は自動削除する。
+ */
 export function ClickFireworks() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sparksRef = useRef<Spark[]>([]);

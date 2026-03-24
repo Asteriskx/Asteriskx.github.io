@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
 
+/**
+ * スクロール量が 400px を超えた時点で表示されるトップへ戻るボタン。
+ * クリックするとページ先頭へスムーズスクロールする。
+ */
 export function BackToTop() {
   const [visible, setVisible] = useState(false);
 

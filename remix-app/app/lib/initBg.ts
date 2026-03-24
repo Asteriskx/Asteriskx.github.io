@@ -19,26 +19,43 @@ const BG_STAR_COUNT = 80;
 
 /** 各フェーズの持続フレーム数 */
 const PHASE_DURATIONS: Record<string, number> = {
-  FLYING:    120,  // 不可視フェーズ。この間に画像をロードしパーティクルをターゲットへ事前収束させる。
-  GATHERING: 300,
-  FORMED:    300,
+  FLYING:     120,  // 不可視フェーズ。この間に画像をロードしパーティクルをターゲットへ事前収束させる。
+  GATHERING:  300,
+  FORMED:     300,
+  DISPERSING: 100,  // 爆散フェーズ。FORMED 終了後にパーティクルを外側へ吹き飛ばす。
 };
 
-const PHASES = ["FLYING", "GATHERING", "FORMED"] as const;
+const PHASES = ["FLYING", "GATHERING", "FORMED", "DISPERSING"] as const;
 
 // ─── 型 ──────────────────────────────────────────────────────────────────────
 
+/** Three.js パーティクル背景アニメーションの1粒子 */
 interface Particle {
-  x: number; y: number; z: number;
-  vx: number; vy: number; vz: number;
-  /** 目標座標 */
-  tx: number; ty: number; tz: number;
-  /** 基本速度スカラー */
+  /** 現在の X 座標（ワールド空間） */
+  x: number;
+  /** 現在の Y 座標（ワールド空間） */
+  y: number;
+  /** 現在の Z 座標（ワールド空間） */
+  z: number;
+  /** X 方向の速度 */
+  vx: number;
+  /** Y 方向の速度 */
+  vy: number;
+  /** Z 方向の速度 */
+  vz: number;
+  /** 目標 X 座標（収束先） */
+  tx: number;
+  /** 目標 Y 座標（収束先） */
+  ty: number;
+  /** 目標 Z 座標（収束先） */
+  tz: number;
+  /** 爆散フェーズで使用する基本速度スカラー */
   spd: number;
-  /** 点のサイズ */
+  /** gl_PointSize の基準サイズ */
   sz: number;
 }
 
+/** 2D ベクトル（アイコンターゲット座標の受け渡しに使用） */
 interface Vec2 { x: number; y: number; }
 
 // ─── エクスポート関数 ─────────────────────────────────────────────────────────
@@ -66,7 +83,15 @@ export function initBg(
 
   // ─── レンダラー ─────────────────────────────────────────────────────────────
 
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
+  // preserveDrawingBuffer: true により、F5/ページ遷移で JS が停止した後も
+  // WebGL の最終フレーム（暗色）がキャンバスに残り、白発光を防ぐ。
+  // デフォルト false ではブラウザがバッファを即時破棄して白になる。
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, preserveDrawingBuffer: true });
+  // WebGL のデフォルト状態による白発光を防ぐため、最速で暗色クリアを実行する。
+  // setSize より前に setClearColor + clear() を呼ぶことで、
+  // レンダラー生成〜初期フレームの間もキャンバスが暗い状態を保つ。
+  renderer.setClearColor(new THREE.Color(0x181c2a), 1);
+  renderer.clear();
   renderer.setPixelRatio(DPR);
   renderer.setSize(W, H);
   renderer.autoClear = false;
@@ -123,19 +148,6 @@ export function initBg(
   // 別シーンで RTT 出力後に描画することで積算を避ける。
   const tileScene = new THREE.Scene();
 
-  // ─── マウス視差 ──────────────────────────────────────────────────────────────
-
-  let mouseNX = 0; // 正規化 X（-0.5〜0.5）
-  let mouseNY = 0; // 正規化 Y（-0.5〜0.5、上が正）
-
-  const onMouseMove = (e: MouseEvent) => {
-    mouseNX =  (e.clientX / W) - 0.5;
-    mouseNY = -((e.clientY / H) - 0.5);
-  };
-  document.addEventListener("mousemove", onMouseMove, { passive: true });
-
-  let camTargetX = 0;
-  let camTargetY = 0;
 
   // ─── 雨滴波紋 ────────────────────────────────────────────────────────────────
   // FORMED フェーズ中にランダム座標へ雨滴が落ちる衝撃をパーティクルへ与える。
@@ -292,8 +304,10 @@ export function initBg(
     const img = new Image();
     img.onload = () => {
       allIconTargets[i] = sampleIconEdges(img);
-      // 最初の画像がロードされたらアニメーションを開始
-      if (i === 0 && iconTargets.length === 0) {
+      // 最初の画像がロードされたらターゲットをアイコン形状に更新する。
+      // FLYING フェーズ廃止により起動時は円ターゲットで開始しているため、
+      // iconTargets.length の guard を外して必ず上書きする。
+      if (i === 0) {
         iconTargets = allIconTargets[0];
         iconCycle   = 1;
         assignTargets();
@@ -327,7 +341,14 @@ export function initBg(
     };
   }
 
+  // FLYING フェーズ廃止: 画像ロード前の暫定ターゲットとして円を使用。
+  // createParticle() が iconTargets を参照するため、生成前に必ず設定する。
+  iconTargets = buildCircleTargets();
+  iconCycle   = 0;
+
   const particles = Array.from({ length: PARTICLE_COUNT }, createParticle);
+  // 生成直後に assignTargets() で全パーティクルへ円ターゲットを確実に割り当て
+  assignTargets();
 
   // ─── 背景の星 ────────────────────────────────────────────────────────────────
 
@@ -347,52 +368,50 @@ export function initBg(
 
   // ─── GPU バッファ（パーティクル Points） ─────────────────────────────────────
 
-  const particlePosArr  = new Float32Array(PARTICLE_COUNT * 3);
-  const particleSizeArr = new Float32Array(PARTICLE_COUNT);
-  const particleGeo     = new THREE.BufferGeometry();
-  particleGeo.setAttribute("position", new THREE.BufferAttribute(particlePosArr,  3));
-  particleGeo.setAttribute("aSize",    new THREE.BufferAttribute(particleSizeArr, 1));
+  const particlePosArr   = new Float32Array(PARTICLE_COUNT * 3);
+  const particleSizeArr  = new Float32Array(PARTICLE_COUNT);
+  const particleAlphaArr = new Float32Array(PARTICLE_COUNT).fill(1);
+  const particleGeo      = new THREE.BufferGeometry();
+  particleGeo.setAttribute("position", new THREE.BufferAttribute(particlePosArr,   3));
+  particleGeo.setAttribute("aSize",    new THREE.BufferAttribute(particleSizeArr,  1));
+  particleGeo.setAttribute("aAlpha",   new THREE.BufferAttribute(particleAlphaArr, 1));
 
   const particleMat = new THREE.ShaderMaterial({
     uniforms: {
-      // uPhaseT: 0.0=FLYING, 0.0→1.0=GATHERING遷移, 2.0=FORMED, 3.0=DISPERSING遷移
+      // uPhaseT: -1.0=FLYING（不可視）, 0.0→1.0=GATHERING遷移, 2.0=FORMED, 2.0→1.0=DISPERSING遷移
       uPhaseT: { value: 0.0 },
-      uMouseX: { value: 0 },
-      uMouseY: { value: 0 },
       uDPR:    { value: DPR },
     },
     vertexShader: `
       attribute float aSize;
-      uniform float uMouseX;
-      uniform float uMouseY;
+      attribute float aAlpha;
       uniform float uDPR;
+      varying float vAlpha;
 
       void main() {
-        vec3 pos = position;
-        // Z 深度に応じてマウス視差を適用
-        pos.x += pos.z * uMouseX * 0.25;
-        pos.y += pos.z * uMouseY * 0.25;
-
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 
         // 奥行きによるサイズ補正（HiDPI 対応）
-        float depth = 1.0 + pos.z / 350.0;
+        float depth = 1.0 + position.z / 350.0;
         gl_PointSize = max(0.5, aSize * clamp(depth, 0.15, 2.5)) * uDPR;
+        vAlpha = aAlpha;
       }
     `,
     fragmentShader: `
       uniform float uPhaseT;
+      varying float vAlpha;
 
       void main() {
         // FLYING フェーズは uPhaseT=-1 で渡される → パーティクル不可視
         if (uPhaseT < 0.0) discard;
+        // 個別 alpha が 0 に近い場合は描画スキップ（GATHERING 中の遠距離パーティクル）
+        if (vAlpha < 0.01) discard;
 
         vec2 uv = gl_PointCoord - 0.5;
         float r = length(uv);
         if (r > 0.5) discard;
 
         // フェーズ別カラー定義（サイトのアクセントカラー #00e5ff に調和する碧・翠系）
-        vec3 cyan    = vec3(0.00, 0.90, 1.00); // FLYING：シアン #00e5ff
         vec3 jade    = vec3(0.20, 1.00, 0.65); // GATHERING：翠 #33ffa6
         vec3 emerald = vec3(0.00, 1.00, 0.55); // FORMED センター：エメラルド #00ff8c
 
@@ -404,12 +423,12 @@ export function initBg(
           col   = r < 0.22 ? emerald : jade;
           alpha = r < 0.22 ? 0.95 : 0.90;
         } else {
-          // GATHERING：色変化を避けるため jade で統一（FORMED と同じ色味を維持）
+          // GATHERING：目標に近いものだけ表示（vAlpha で距離フェードイン）
           col   = jade;
           alpha = 0.90;
         }
 
-        gl_FragColor = vec4(col, alpha);
+        gl_FragColor = vec4(col, alpha * vAlpha);
       }
     `,
     transparent: true,
@@ -474,23 +493,16 @@ export function initBg(
 
   const bgMat = new THREE.ShaderMaterial({
     uniforms: {
-      uMouseX: { value: 0 },
-      uMouseY: { value: 0 },
-      uDPR:    { value: DPR },
+      uDPR: { value: DPR },
     },
     vertexShader: `
       attribute float aSize;
       attribute float aAlpha;
-      uniform   float uMouseX;
-      uniform   float uMouseY;
       uniform   float uDPR;
       varying   float vAlpha;
 
       void main() {
-        vec3 pos = position;
-        pos.x += pos.z * uMouseX * 0.6;
-        pos.y += pos.z * uMouseY * 0.6;
-        gl_Position  = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+        gl_Position  = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         gl_PointSize = aSize * uDPR;
         vAlpha       = aAlpha;
       }
@@ -516,9 +528,8 @@ export function initBg(
   scene.add(bgMesh);
 
   // ─── 波紋リングプール ─────────────────────────────────────────────────────────
-  // FORMED フェーズ中にアイコン左の背景エリアへ拡大リングを出現させる。
+  // クリック位置へ拡大リングをスポーンするエフェクト。
   // 単位円（半径1）をスケールで拡大し、opacity を 0.55 → 0 にフェードさせる。
-  // クリック時にもクリック位置へリングをスポーンする。
   // 最大 8 個を事前確保してリサイクルすることで GC 負荷を抑える。
 
   const RIPPLE_SEGS = 48;
@@ -571,7 +582,6 @@ export function initBg(
   }
 
   // クリック位置（スクリーン座標 → ワールド座標変換）でリングをスポーン
-  // FORMED フェーズ以外はスキップ
   const onRippleClick = (e: MouseEvent) => {
     const wx = e.clientX - W / 2;
     const wy = H / 2 - e.clientY;
@@ -582,7 +592,6 @@ export function initBg(
   // ─── タイルフリップ ───────────────────────────────────────────────────────────
   // 全画面をタイルグリッドで覆い、左上から波状にカードフリップするアニメーション。
   // 裏面にバイナリ海に浮かぶアスタリスク（＊）のピクセルアートを表示。
-  // アイコンエリアに重なるタイルは alpha を下げてパーティクルを透かす。
   // InstancedMesh + カスタムシェーダーで全タイルを 1 描画コールで処理する。
 
   const TILE_SIZE  = Math.round(Math.min(W, H) / 28);
@@ -625,9 +634,7 @@ export function initBg(
         tileIsAsterisk[i] = isAst ? 1.0 : 0.0;
         // 波の遅延: アスタリスク中心からの距離ベース（中心=0 → 外周=1 の放射波）
         tileDelays[i] = Math.sqrt(dx * dx + dy * dy) / maxDist;
-        // アイコンエリア境界から左へグラデーションで alpha を落とす。
-        // アイコンエリア内（右側）は 0.0 で完全非表示。境界左 3 タイル分でフェード。
-        // 全タイル均一 alpha（パーティクルエリアも含めて四角を表示する）
+        // 全タイル均一 alpha（パーティクルエリアも含めて表示する）
         tileAlphas[i] = 0.50;
       }
     }
@@ -717,7 +724,7 @@ export function initBg(
   tileGeo.setAttribute("aTileIdx",    tileIdxAttr);
 
   // アスタリスクの有効 col 範囲を左背景エリアに制限する。
-  // icon エリア（右側, tileAlphas=0）にドリフトすると ＊ が見えなくなるため。
+  // icon エリア（右側）にドリフトするとパーティクルに埋もれて ＊ が見えなくなるため。
   // 腕の長さ（AST_RADIUS + 2 タイル余裕）分だけ境界手前を上限とする。
   const _iconLeft     = ICON_OFFSET_X - ICON_SIZE * 0.5;
   const astColMax     = Math.max(AST_RADIUS + 1,
@@ -744,9 +751,13 @@ export function initBg(
 
   // ─── フェーズ管理 ────────────────────────────────────────────────────────────
 
-  let phaseIndex = 0;
+  // FLYING フェーズをスキップして GATHERING から開始する。
+  // FLYING（不可視 2 秒）は LoginOverlay を持たないページで
+  // パーティクルが見えない原因になるため廃止。
+  // DISPERSING → GATHERING のループ設計上、FLYING は二度と踏まない。
+  let phaseIndex = PHASES.indexOf("GATHERING");
   let phaseTimer = 0;
-  let phase      = "FLYING";
+  let phase      = "GATHERING";
 
   /** フェーズを次へ進め、必要な状態リセットを行う */
   function advancePhase() {
@@ -757,12 +768,15 @@ export function initBg(
       assignTargets();
     }
 
-    // FORMED 終了後は FLYING をスキップして直接 GATHERING へ
-    if (phase === "FORMED") {
+    // FORMED → DISPERSING（爆散）→ GATHERING（次アイコン）の順で遷移。
+    // DISPERSING 後は FLYING をスキップして直接 GATHERING へ進む。
+    if (phase === "DISPERSING") {
       phaseIndex = PHASES.indexOf("GATHERING");
-      raindrops  = []; // フェーズ切り替え時に残存波紋をクリア
     } else {
       phaseIndex = (phaseIndex + 1) % PHASES.length;
+    }
+    if (phase === "FORMED") {
+      raindrops = []; // フェーズ切り替え時に残存波紋をクリア
     }
     phase      = PHASES[phaseIndex];
     phaseTimer = 0;
@@ -778,7 +792,7 @@ export function initBg(
     }
 
     if (phase === "FLYING") {
-      // 初回起動時のみ: パーティクルを画面全体にランダム配置
+      // FLYING フェーズへの保険コード（現在は到達しないが、設計変更時のために残す）
       particles.forEach(p => {
         const angle = Math.random() * Math.PI * 2;
         const speed = 0.1 + Math.random() * 0.3;
@@ -882,7 +896,7 @@ export function initBg(
 
   // ─── トレイル書き込み ─────────────────────────────────────────────────────────
 
-  // colorT: 0=シアン, 1=パープル（GATHERING→DISPERSING のフェーズ進行に連動）
+  // colorT: 0=シアン, 1=翠（jade #33ffa6）（GATHERING→DISPERSING のフェーズ進行に連動）
   function writeTrail(p: Particle, i: number, velocity: number, colorT: number) {
     const TRAIL_LENGTH_SCALE = 2.2;
     const TRAIL_MAX_LENGTH   = 36;
@@ -937,17 +951,24 @@ export function initBg(
 
     const progress = phaseTimer / PHASE_DURATIONS[phase];
 
-    // RTT トレイルのフェード量。全フェーズ統一で色の濃さを均一に保つ。
-    fadeMat.opacity = 0.12;
+    // フェーズ開始直後（1フレーム目）は RTT をクリアしてトレイル残像をリセット。
+    // FORMED: GATHERING の螺旋トレイル積算をリセット
+    // DISPERSING: FORMED の静止トレイル積算をリセット（矩形残像の再出現を防ぐ）
+    if ((phase === "FORMED" || phase === "DISPERSING") && phaseTimer === 1) {
+      renderer.setRenderTarget(rtA); renderer.clear();
+      renderer.setRenderTarget(rtB); renderer.clear();
+      renderer.setRenderTarget(null);
+    }
+    // GATHERING 中はフェードを速くしてトレイルが積算されすぎるのを防ぐ。
+    // GATHERING は積算を抑制、DISPERSING は爆散トレイルを残す、FORMED は静止で短く
+    fadeMat.opacity = phase === "GATHERING" ? 0.28 : phase === "DISPERSING" ? 0.22 : 0.12;
 
-    // カメラの視差スムーシング
-    camTargetX += (mouseNX * 22 - camTargetX) * 0.04;
-    camTargetY += (mouseNY * 22 - camTargetY) * 0.04;
-    camera.position.x = camTargetX;
-    camera.position.y = camTargetY;
+    // カメラは固定（マウス視差なし）
+    camera.position.x = 0;
+    camera.position.y = 0;
 
     // ユニフォーム更新
-    // uPhaseT: FLYING=-1（不可視）, GATHERING=0→1, FORMED=2, DISPERSING=3→2（逆進）
+    // uPhaseT: FLYING=-1（不可視）, GATHERING=0→1, FORMED=2, DISPERSING=2→1（逆進）
     // FLYING は散布状態を見せないため -1 を渡し fragment shader 側で discard する。
     const uPhaseT =
       phase === "FORMED"     ? 2.0 :
@@ -955,11 +976,6 @@ export function initBg(
       phase === "DISPERSING" ? 2.0 - progress :
       /* FLYING */             -1.0;
     (particleMat.uniforms.uPhaseT as { value: number }).value = uPhaseT;
-    (particleMat.uniforms.uMouseX as { value: number }).value = mouseNX;
-    (particleMat.uniforms.uMouseY as { value: number }).value = mouseNY;
-    (bgMat.uniforms.uMouseX       as { value: number }).value = mouseNX;
-
-    (bgMat.uniforms.uMouseY       as { value: number }).value = mouseNY;
 
     // 背景星のゆらぎ更新 + 波紋スプリング
     bgStars.forEach((star, i) => {
@@ -986,8 +1002,8 @@ export function initBg(
     rippleRings.forEach(ring => {
       if (!ring.active) return;
       ring.r += 0.9;
-      const t          = ring.r / ring.maxR;             // 0→1（進捗）
-      ring.mat.opacity = 0.55 * Math.pow(1 - t, 1.5);   // ease-out フェード
+      const t          = ring.r / ring.maxR;          // 0→1（進捗）
+      ring.mat.opacity = 0.55 * Math.pow(1 - t, 1.5); // ease-out フェード
       ring.mesh.scale.setScalar(ring.r);
       if (ring.r >= ring.maxR) {
         ring.active       = false;
@@ -1087,10 +1103,58 @@ export function initBg(
       // フェーズ問わず均一サイズ。velocity ボーナスは視覚的にアンバランスになるため除去。
       particleSizeArr[i] = p.sz * 4.0;
 
-      // トレイルの書き込み（速度が一定以上の場合のみ表示）
-      // GATHERING は progress に連動してシアン→パープル、DISPERSING は逆進
+      // GATHERING 中：序盤は目標基準（初回ランダム配置の散乱を防ぐ）、
+      // 終盤は中心円基準（丸型演出）へ progress に応じてブレンド。
+      let particleVisible = true;
+      if (phase === "GATHERING") {
+        // 目標地点への近さ（初期散乱防止用）。
+        // progress が上がるにつれ影響をゼロに絞り、終盤は circle のみで判定する。
+        // これにより FORMING 終了時に矩形エッジが circle 外に確実に収まる。
+        const tdx        = p.x - p.tx;
+        const tdy        = p.y - p.ty;
+        const distToTgt  = Math.sqrt(tdx * tdx + tdy * tdy);
+        const tgtWeight  = Math.max(0, 1 - progress * 1.5); // progress >= 0.67 でゼロ
+        const alphaByTgt = Math.min(1, Math.max(0, 1 - distToTgt / (ICON_SIZE * 0.2))) * tgtWeight;
+        // 中心円（progress に応じて徐々に拡大）。
+        // 半径を ICON_SIZE * 0.48（< 画像半辺の 0.5）にすることで
+        // 画像の上下左右端に並ぶ矩形エッジパーティクルをマスク外に追い出す。
+        const cdx           = p.x - ICON_OFFSET_X;
+        const cdy           = p.y;
+        const distToCenter  = Math.sqrt(cdx * cdx + cdy * cdy);
+        const circleRadius  = ICON_SIZE * 0.48 * progress; // 序盤は 0、終盤フル円
+        const alphaByCircle = Math.min(1, Math.max(0, (circleRadius - distToCenter) / (ICON_SIZE * 0.06)));
+        particleAlphaArr[i] = Math.max(alphaByTgt, alphaByCircle);
+        particleVisible = particleAlphaArr[i] > 0.01;
+      } else if (phase === "FORMED") {
+        // FORMED も GATHERING 終了と同じ中心円でクリップ（シームレスな移行＋丸型維持）。
+        // 0.48 < 0.5（半辺）なので上下左右端が確実に円外に出る。
+        const cdx          = p.x - ICON_OFFSET_X;
+        const cdy          = p.y;
+        const distToCenter = Math.sqrt(cdx * cdx + cdy * cdy);
+        particleAlphaArr[i] = Math.min(1, Math.max(0, (ICON_SIZE * 0.48 - distToCenter) / (ICON_SIZE * 0.06)));
+        particleVisible = particleAlphaArr[i] > 0.01;
+      } else if (phase === "DISPERSING") {
+        // 序盤は FORMED の円形マスクを継続し、矩形パーティクルの瞬間再出現を防ぐ。
+        // progress が進むにつれパーティクルが外側へ飛び出し、マスクを自然に抜けていく。
+        const cdx = p.x - ICON_OFFSET_X;
+        const cdy = p.y;
+        const distToCenter = Math.sqrt(cdx * cdx + cdy * cdy);
+        const circleAlpha = Math.min(1, Math.max(0, (ICON_SIZE * 0.48 - distToCenter) / (ICON_SIZE * 0.06)));
+        // progress 0.2 までにマスクを解除（それ以降はパーティクルが十分広がっている）
+        const maskWeight  = Math.max(0, 1 - progress * 5);
+        const baseAlpha   = Math.max(circleAlpha * maskWeight, 1 - maskWeight);
+        // 後半（progress > 0.7）でフェードアウト
+        const fadeOut = progress < 0.7 ? 1.0 : Math.max(0, 1 - (progress - 0.7) / 0.3);
+        particleAlphaArr[i] = baseAlpha * fadeOut;
+        particleVisible = particleAlphaArr[i] > 0.01;
+      } else {
+        particleAlphaArr[i] = 1.0;
+      }
+
+      // トレイルの書き込み（速度が一定以上 かつ パーティクルが可視の場合のみ）
+      // 遠距離パーティクルのトレイルが迷子の点として見えるのを防ぐ
       const trailColorT = phase === "GATHERING" ? progress : phase === "DISPERSING" ? 1.0 - progress : 0.0;
-      if (showTrails && velocity > MIN_TRAIL_VELOCITY) {
+      if (showTrails && velocity > MIN_TRAIL_VELOCITY && particleVisible) {
         writeTrail(p, i, velocity, trailColorT);
       } else {
         clearTrail(i);
@@ -1099,6 +1163,7 @@ export function initBg(
 
     particleGeo.attributes["position"].needsUpdate = true;
     particleGeo.attributes["aSize"].needsUpdate    = true;
+    particleGeo.attributes["aAlpha"].needsUpdate   = true;
     trailGeo.attributes["position"].needsUpdate    = true;
     trailGeo.attributes["aColor"].needsUpdate      = true;
     trailGeo.attributes["aAlpha"].needsUpdate      = true;
@@ -1160,12 +1225,20 @@ export function initBg(
 
   // ─── クリーンアップ ──────────────────────────────────────────────────────────
 
+  // ページ離脱直前に暗色フレームを確定描画する。
+  // preserveDrawingBuffer と組み合わせることで、F5/ナビゲーション後の白発光を防ぐ。
+  const onPageHide = () => {
+    renderer.setClearColor(new THREE.Color(0x181c2a), 1);
+    renderer.setRenderTarget(null);
+    renderer.clear();
+  };
+  window.addEventListener("pagehide", onPageHide);
+
   return () => {
     cancelAnimationFrame(animId);
-    window.removeEventListener("resize",  onResize);
-    document.removeEventListener("mousemove", onMouseMove);
-
-    window.removeEventListener("click", onRippleClick);
+    window.removeEventListener("resize",    onResize);
+    window.removeEventListener("click",     onRippleClick);
+    window.removeEventListener("pagehide",  onPageHide);
     tileGeo.dispose();
     tileMat.dispose();
     rippleRings.forEach(ring => {

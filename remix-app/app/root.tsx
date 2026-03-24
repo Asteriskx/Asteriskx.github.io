@@ -18,31 +18,32 @@ export const links: LinksFunction = () => [
   { rel: "stylesheet", href: globalStyles },
 ];
 
-const SITE_URL = "https://asteriskx.net";
-const OGP_IMAGE = `${SITE_URL}/assets/image/logo-v2.png`;
-
 export const meta: MetaFunction = () => [
   { title: "ぽーとふぉりおっぽいもの" },
-  { name: "description",              content: "If it doesn't exist, that's reason enough to build it." },
-  { property: "og:type",              content: "website" },
-  { property: "og:url",               content: SITE_URL },
-  { property: "og:title",             content: "ぽーとふぉりおっぽいもの" },
-  { property: "og:description",       content: "If it doesn't exist, that's reason enough to build it." },
-  { property: "og:image",             content: OGP_IMAGE },
-  { name: "twitter:card",             content: "summary" },
-  { name: "twitter:site",             content: "@Astrisk_" },
-  { name: "twitter:title",            content: "ぽーとふぉりおっぽいもの" },
-  { name: "twitter:description",      content: "If it doesn't exist, that's reason enough to build it." },
-  { name: "twitter:image",            content: OGP_IMAGE },
+  { name: "description", content: "If it doesn't exist, that's reason enough to build it." },
 ];
 
+/**
+ * アプリケーションルート。全ページ共通の HTML シェルと常駐コンポーネントを提供する。
+ * LoginOverlay は "/" かつ未完了・リロード時のみ表示し、完了後は sessionStorage に記録する。
+ * BgCanvas / CustomCursor / ClickFireworks はページ遷移をまたいで再マウントしないよう
+ * `<Outlet>` の外側に配置している。
+ */
 export default function App() {
   const { pathname } = useLocation();
 
-  const [showLogin, setShowLogin] = useState(false);
+  // lazy initializer で初回レンダー時点から判定する。
+  // useEffect 内で判定すると「useState(false) → 1フレーム露出 → true」の
+  // タイムラグが生まれ、F5 時にメインページが一瞬白発光する原因になる。
+  const [showLogin, setShowLogin] = useState(() => {
+    if (typeof window === "undefined") return false; // SSG サーバー側スキップ
+    if (window.location.pathname !== "/") return false;
+    const nav = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+    const isReload = nav?.type === "reload";
+    return !sessionStorage.getItem("lo_done") || isReload;
+  });
 
-  // LoginOverlay は "/" のみ表示。page-transition の外に置くことで
-  // fadeIn アニメーションに引きずられず即時表示できる。
+  // ルート遷移で "/" に来た場合（初回ロード以外）の検知用
   useEffect(() => {
     if (pathname !== "/") return;
     const nav = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;

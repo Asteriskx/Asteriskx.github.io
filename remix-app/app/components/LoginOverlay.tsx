@@ -1,11 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const SSH_CMD      = "$ ssh asteriskx@portfolio";
+/** パスワード入力ドットの表示数 */
 const DOTS         = 8;
+/** 認証プログレスバーの総ステップ数 */
 const BAR_TOTAL    = 20;
+/** 起動プログレスバーの総ステップ数 */
 const LAUNCH_TOTAL = 20;
 
-// figlet "Standard" — ASTERISKX (generated via `npx figlet -f Standard`)
+/** figlet "Standard" フォントで生成した ASTERISKX アスキーアート（npx figlet -f Standard） */
 const WELCOME_BANNER = [
   "                                                       ",
   "     _    ____ _____ _____ ____  ___ ____  _  ____  __",
@@ -15,7 +18,7 @@ const WELCOME_BANNER = [
   " /_/   \\_\\____/ |_| |_____|_| \\_\\___|____/|_|\\_\\/_/\\_\\",
 ];
 
-// figlet "Standard" — .NET (generated via `npx figlet -f Standard`)
+/** figlet "Standard" フォントで生成した .NET アスキーアート（npx figlet -f Standard） */
 const NET_BANNER = [
   "                      ",
   "    _   _ _____ _____ ",
@@ -25,12 +28,14 @@ const NET_BANNER = [
   " (_)_| \\_|_____| |_|  ",
 ];
 
-// ASTERISKX + .net merged side-by-side
+/** ASTERISKX と .net を横並びに結合したフルバナー */
 const FULL_BANNER = WELCOME_BANNER.map((line, i) => line + (NET_BANNER[i] ?? ""));
 
-// ASCII art columns / rows — W:H ≈ char_height/char_width to keep the image square
+/** ASCII アートの横幅（文字数）。W:H = 文字高:文字幅 の比率に合わせて縦横比を保持する */
 const AA_W = 128;
+/** ASCII アートの縦幅（行数） */
 const AA_H = 48;
+/** ASCII アートの文字セット（暗い→明るい順の5階調） */
 const AA_CHARS = " ░▒▓█";
 
 const FALLBACK_ART: string[] = Array(AA_H).fill(" ".repeat(AA_W));
@@ -47,6 +52,11 @@ const SYSINFO = [
   { label: "",       value: "● ● ● ● ● ● ● ● ●",      cls: "lo-nf-pal"  },
 ];
 
+/**
+ * ログインアニメーションのフェーズ識別子。
+ * `PHASE_ORDER` に定義された順序で遷移する:
+ * ssh → connected → login → password → auth → granted → welcome → neofetch → fading
+ */
 type Phase =
   | "ssh" | "connected" | "login" | "password"
   | "auth" | "granted" | "welcome"
@@ -59,6 +69,16 @@ const PHASE_ORDER: Phase[] = [
 
 interface Props { onDone: () => void; }
 
+/**
+ * 画像を ASCII アート（5階調）に変換する非同期関数。
+ * Canvas 2D で画像を描画後、各セルの平均輝度（RGB 重み付き: R×0.299 / G×0.587 / B×0.114）を計算し
+ * {@link AA_CHARS} の対応文字にマッピングする。
+ * 変換に失敗した場合は {@link FALLBACK_ART}（空白行の配列）を返す。
+ * @param src 変換元の画像 URL
+ * @param w ASCII アートの横幅（文字数）
+ * @param h ASCII アートの縦幅（行数）
+ * @returns 各行の文字列を格納した配列
+ */
 function imageToAscii(src: string, w: number, h: number): Promise<string[]> {
   return new Promise((resolve) => {
     const img = new Image();
@@ -106,6 +126,13 @@ function imageToAscii(src: string, w: number, h: number): Promise<string[]> {
   });
 }
 
+/**
+ * SSH ログイン風アニメーションを再生するフルスクリーンオーバーレイコンポーネント。
+ * {@link Phase} に従いタイプライター・認証バー・neofetch 演出を順次実行する。
+ * neofetch フェーズ中はクリックでスキップ可能。
+ * fading 開始から 700ms 後に `onDone` を呼び出してオーバーレイを解除する。
+ * @param onDone アニメーション完了時に呼ばれるコールバック
+ */
 export function LoginOverlay({ onDone }: Props) {
   const [phase,       setPhase] = useState<Phase>("ssh");
   const [sshText,     setSsh]   = useState("");
@@ -114,22 +141,26 @@ export function LoginOverlay({ onDone }: Props) {
   const [launchCount, setLaunch]= useState(0);
   const [asciiArt,    setArt]   = useState<string[]>(FALLBACK_ART);
 
+  // フェーズ遷移用 setTimeout を ref で追跡し、アンマウント時に確実にキャンセルする
+  const pendingTid = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (pendingTid.current) clearTimeout(pendingTid.current); }, []);
+
   useEffect(() => {
     imageToAscii("/assets/image/logo-v4.png", AA_W, AA_H).then(setArt);
   }, []);
 
-  // SSH typewriter
+  // ─── SSH タイプライター ──────────────────────────────────────────────────────
   useEffect(() => {
     if (phase !== "ssh") return;
     let i = 0;
     const iv = setInterval(() => {
       setSsh(SSH_CMD.slice(0, ++i));
-      if (i >= SSH_CMD.length) { clearInterval(iv); setTimeout(() => setPhase("connected"), 400); }
+      if (i >= SSH_CMD.length) { clearInterval(iv); pendingTid.current = setTimeout(() => setPhase("connected"), 400); }
     }, 32);
     return () => clearInterval(iv);
   }, [phase]);
 
-  // Simple timeout-only phase transitions
+  // ─── タイムアウト駆動のフェーズ遷移 ─────────────────────────────────────────
   useEffect(() => {
     const transitions: Partial<Record<Phase, [Phase, number]>> = {
       connected: ["login",     500],
@@ -143,29 +174,29 @@ export function LoginOverlay({ onDone }: Props) {
     return () => clearTimeout(t);
   }, [phase]);
 
-  // Password dots
+  // ─── パスワードドット入力 ────────────────────────────────────────────────────
   useEffect(() => {
     if (phase !== "password") return;
     let d = 0;
     const iv = setInterval(() => {
       setDots(++d);
-      if (d >= DOTS) { clearInterval(iv); setTimeout(() => setPhase("auth"), 500); }
+      if (d >= DOTS) { clearInterval(iv); pendingTid.current = setTimeout(() => setPhase("auth"), 500); }
     }, 100);
     return () => clearInterval(iv);
   }, [phase]);
 
-  // Auth progress bar
+  // ─── 認証プログレスバー ──────────────────────────────────────────────────────
   useEffect(() => {
     if (phase !== "auth") return;
     let b = 0;
     const iv = setInterval(() => {
       setBar(++b);
-      if (b >= BAR_TOTAL) { clearInterval(iv); setTimeout(() => setPhase("granted"), 350); }
+      if (b >= BAR_TOTAL) { clearInterval(iv); pendingTid.current = setTimeout(() => setPhase("granted"), 350); }
     }, 48);
     return () => clearInterval(iv);
   }, [phase]);
 
-  // Neofetch: launch progress bar + auto-advance
+  // ─── neofetch：起動プログレスバー ───────────────────────────────────────────
   useEffect(() => {
     if (phase !== "neofetch") return;
     // ローカルカウンターで管理し、state は表示用にのみ使う
@@ -177,7 +208,7 @@ export function LoginOverlay({ onDone }: Props) {
     }, 2200 / LAUNCH_TOTAL);
     const t = setTimeout(() => {
       setPhase("fading");
-      setTimeout(() => onDone(), 700);
+      pendingTid.current = setTimeout(() => onDone(), 700);
     }, 2200);
     return () => { clearInterval(iv); clearTimeout(t); };
   }, [phase, onDone]);
@@ -195,7 +226,7 @@ export function LoginOverlay({ onDone }: Props) {
     if (phase !== "neofetch") return;
     setLaunch(LAUNCH_TOTAL);
     setPhase("fading");
-    setTimeout(() => onDone(), 700);
+    pendingTid.current = setTimeout(() => onDone(), 700);
   };
 
   return (

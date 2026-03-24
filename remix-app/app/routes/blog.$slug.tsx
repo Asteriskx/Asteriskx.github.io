@@ -5,6 +5,13 @@ import { Header } from "../components/Header";
 import { BackToTop } from "../components/BackToTop";
 import type { PostFrontmatter } from "../types";
 
+/**
+ * ブログ記事個別ページのクライアントローダー。
+ * `params.slug` に対応する MDX モジュールを動的インポートし記事データを返す。
+ * UX のため最低 500ms のローディング表示を保証する（軽量記事でも即座に消えないよう）。
+ * @param params.slug 記事のスラッグ（URL パラメーター）
+ * @throws {Response} スラッグに対応する MDX ファイルが存在しない場合に 404 を throw
+ */
 export async function clientLoader({ params }: Route.ClientLoaderArgs) {
   const modules = import.meta.glob<{
     default: React.ComponentType;
@@ -18,7 +25,7 @@ export async function clientLoader({ params }: Route.ClientLoaderArgs) {
   // 記事が軽くても最低 500ms はローディングを見せる
   const [mod] = await Promise.all([
     loader(),
-    new Promise(r => setTimeout(r, 500)),
+    new Promise(r => setTimeout(r, 1000)),
   ]);
   return { Component: mod.default, frontmatter: mod.frontmatter };
 }
@@ -32,6 +39,10 @@ export const meta: MetaFunction = ({ matches }) => {
   ];
 };
 
+/**
+ * clientLoader のデータ取得中（ハイドレーション完了前）に表示されるフォールバック UI。
+ * ターミナル風のプログレスバーでロード中であることを表現する。
+ */
 export function HydrateFallback() {
   const { slug } = useParams();
   return (
@@ -47,6 +58,10 @@ export function HydrateFallback() {
   );
 }
 
+/**
+ * ブログ記事個別ページ（/blog/:slug）。
+ * clientLoader が返した MDX コンポーネントをレンダリングし、記事本文・日付・ヘッダーを表示する。
+ */
 export default function BlogPost() {
   const { Component, frontmatter } = useLoaderData<typeof clientLoader>();
 

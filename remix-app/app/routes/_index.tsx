@@ -3,6 +3,8 @@ import { ClientOnly } from "../components/ClientOnly";
 import { Header } from "../components/Header";
 import { HeroTerminal } from "../components/HeroTerminal";
 import { BackToTop } from "../components/BackToTop";
+import { ScrollIndicator } from "../components/ScrollIndicator";
+import { MatrixRainCard } from "../components/MatrixRainCard";
 import { useScrollReveal } from "../hooks/useScrollReveal";
 import type { PostFrontmatter } from "../types";
 
@@ -10,19 +12,52 @@ export const meta: MetaFunction = () => [
   { title: "ぽーとふぉりおっぽいもの" },
 ];
 
+// ─── Stack tag category → CSS class マッピング ───────────────────────────────
+
+/** ヒーロータグの色と対応させる（sys=cyan / app=green / web=purple / gfx=amber / infra=coral） */
+const TAG_CAT: Record<string, string> = {
+  // Systems
+  "C": "sys", "C++": "sys", "C#": "sys", "Rust": "sys", "Assembly": "sys",
+  // App / Script
+  "Python": "app", "Java": "app", "Ruby": "app",
+  // Web / Script
+  "TypeScript": "web", "JavaScript": "web", "React Router v7": "web",
+  "HTML": "web", "Node.js": "web", "VBA": "web",
+  // Graphics
+  "Three.js": "gfx", "p5.js": "gfx", "Processing": "gfx",
+  // Infra / Tools
+  "GitHub Pages": "infra", "GCC": "infra", "Cygwin": "infra",
+  "VSCode API": "infra", "Selenium": "infra", "Linux": "infra",
+  // Desktop (.NET ecosystem) → web と同じ purple
+  "WPF": "web", "WinForms": "web", ".NET 9": "web",
+  ".NET Standard": "web", "Prism": "web", "ReactiveProperty": "web",
+};
+
 // ─── Works ───────────────────────────────────────────────────────────────────
 
+/** Work セクションの1カード分のデータ */
 interface Work {
+  /** カードに表示するアイコン画像 URL */
   icon: string;
+  /** アイコン img 要素の CSS クラス名 */
   iconClass: string;
+  /** 制作・活動開始年（例: "2021～"） */
   year: string;
+  /** プロジェクトカテゴリ（例: "Desktop App"） */
   cat: string;
+  /** プロジェクト名 */
   title: string;
+  /** 説明文1行目 */
   desc1: string;
+  /** 説明文2行目 */
   desc2: string;
+  /** 使用技術・スタックのタグ配列 */
   stack: string[];
+  /** GitHub 等へのリンク URL */
   link: string;
+  /** リンクアンカーの aria-label */
   ariaLabel: string;
+  /** true の場合 "featured" バッジを表示しカードを強調する */
   featured: boolean;
 }
 
@@ -72,8 +107,8 @@ const WORKS: Work[] = [
     year: "2021～",
     cat: "Desktop App",
     title: "Sagiri-NowPlaying",
-    desc1: "Spotify / SoundCloud の再生中楽曲を Twitter / Misskey へ投稿できる C# 製アプリ。",
-    desc2: "再生情報確認・アートワーク表示機能も搭載。",
+    desc1: "Spotify / SoundCloud（開発中）/ MusicBee（開発中）の再生中楽曲を",
+    desc2: "Twitter（開発中）/ Misskey へ投稿できる C# 製アプリ。再生情報確認・アートワーク表示機能も搭載。",
     stack: ["C#", ".NET 9", "WPF", "Prism", "ReactiveProperty", "Selenium"],
     link: "https://github.com/Sagiri-Dev/Sagiri",
     ariaLabel: "Sagiri NowPlaying GitHub",
@@ -85,8 +120,8 @@ const WORKS: Work[] = [
     year: "2017～",
     cat: "Library",
     title: "Legato",
-    desc1: "AIMP4 の再生曲を Twitter / Misskey へ投稿できる C# 製ラッパーライブラリ。",
-    desc2: "プロジェクト立ち上げ後、まりはち氏が合流。派生アプリの基盤として機能する。",
+    desc1: "AIMP 4 / 5 の再生曲を Twitter / Misskey へ投稿できる C# 製ラッパーライブラリ。",
+    desc2: "プロジェクト立ち上げ後、まりはち氏（@mr8Alice）が合流。派生アプリの基盤として機能する。",
     stack: ["C#", "WinForms", ".NET Standard"],
     link: "https://github.com/Legato-Dev/Legato",
     ariaLabel: "Legato GitHub",
@@ -98,8 +133,8 @@ const WORKS: Work[] = [
     year: "2017～",
     cat: "Desktop App",
     title: "Legato-NowPlaying",
-    desc1: "AIMP4 の再生曲を Twitter / Misskey へ投稿できる C# 製デスクトップアプリ。",
-    desc2: "まりはち、syuilo 氏との共同開発。",
+    desc1: "AIMP 4 / 5 の再生曲を Twitter / Misskey へ投稿できる C# 製デスクトップアプリ。",
+    desc2: "まりはち氏（@mr8Alice）、syuilo 氏（@syuilo）との共同開発。",
     stack: ["C#", "WinForms", ".NET Standard"],
     link: "https://github.com/Legato-Dev/Legato-NowPlaying",
     ariaLabel: "Legato NowPlaying GitHub",
@@ -124,6 +159,11 @@ const RECENT_POSTS = Object.entries(postModules)
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+/**
+ * ホームページのルートコンポーネント。
+ * 01. About（ターミナル）/ 02. Work（カード一覧）/ 03. Blog（最新3件）/ 04. Contact
+ * の4セクションで構成される。
+ */
 export default function Index() {
   useScrollReveal();
 
@@ -131,11 +171,13 @@ export default function Index() {
     <>
       <Header />
 
+      <ClientOnly>{() => <ScrollIndicator />}</ClientOnly>
+
       {/* 01. About / Hero */}
       <section className="hero section" id="about">
         <div className="section-head reveal">
           <span className="sec-num">01</span>
-          <span className="sec-label">About</span>
+          <span className="sec-label"><span className="sec-scan" data-text="About">About</span></span>
         </div>
         <div className="hero-inner">
           <ClientOnly>{() => <HeroTerminal />}</ClientOnly>
@@ -147,7 +189,7 @@ export default function Index() {
       <section className="section" id="work">
         <div className="section-head reveal">
           <span className="sec-num">02</span>
-          <span className="sec-label">Work</span>
+          <span className="sec-label"><span className="sec-scan" data-text="Work">Work</span></span>
         </div>
         <div className="work-list">
           {WORKS.map((w) => (
@@ -155,6 +197,10 @@ export default function Index() {
               key={w.title}
               className={`work-item reveal${w.featured ? " work-item--featured" : ""}`}
             >
+              {/* hover 時にレーザーが枠に沿って走る SVG ボーダー */}
+              <svg className="work-laser" aria-hidden="true">
+                <rect width="100%" height="100%" rx="5" ry="5" />
+              </svg>
               <img src={w.icon} alt={w.title} className={w.iconClass} />
               <div className="work-meta">
                 <span className="work-year">{w.year}</span>
@@ -169,7 +215,7 @@ export default function Index() {
                 <p className="work-desc">{w.desc2}</p>
                 <div className="work-stack">
                   {w.stack.map((s) => (
-                    <span key={s} className="stack-tag">{s}</span>
+                    <span key={s} className={`stack-tag stack-tag--${TAG_CAT[s] ?? "sys"}`}>{s}</span>
                   ))}
                 </div>
               </div>
@@ -191,7 +237,7 @@ export default function Index() {
       <section className="section" id="blog">
         <div className="section-head reveal">
           <span className="sec-num">03</span>
-          <span className="sec-label">Blog</span>
+          <span className="sec-label"><span className="sec-scan" data-text="Blog">Blog</span></span>
         </div>
         <div className="blog-recent">
           {RECENT_POSTS.length === 0 ? (
@@ -202,7 +248,7 @@ export default function Index() {
             </div>
           ) : (
             RECENT_POSTS.map((post) => (
-              <article key={post.slug} className="blog-card reveal">
+              <MatrixRainCard key={post.slug} className="blog-card reveal">
                 <a href={`/blog/${post.slug}`} className="blog-card-link">
                   <div className="blog-card-meta">
                     <time className="blog-date">{post.date}</time>
@@ -211,7 +257,7 @@ export default function Index() {
                   <p className="blog-card-desc">{post.description}</p>
                   <span className="blog-card-arrow">[ read ]</span>
                 </a>
-              </article>
+              </MatrixRainCard>
             ))
           )}
           <div className="blog-viewall reveal">
@@ -226,7 +272,7 @@ export default function Index() {
       <section className="section" id="contact">
         <div className="section-head reveal">
           <span className="sec-num">04</span>
-          <span className="sec-label">Contact</span>
+          <span className="sec-label"><span className="sec-scan" data-text="Contact">Contact</span></span>
         </div>
         <div className="contact-body">
           <p className="contact-lead reveal">連絡はこちらまで。</p>

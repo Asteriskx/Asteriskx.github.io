@@ -1,9 +1,11 @@
 import type { MetaFunction } from "react-router";
 import { Header } from "../components/Header";
 import { BackToTop } from "../components/BackToTop";
+import { MatrixRainCard } from "../components/MatrixRainCard";
 import { useScrollReveal } from "../hooks/useScrollReveal";
 import type { PostFrontmatter } from "../types";
 
+/** `import.meta.glob` で取得した MDX モジュールの型 */
 interface PostModule {
   frontmatter: PostFrontmatter;
 }
@@ -21,6 +23,10 @@ const posts = Object.entries(postModules)
 
 export const meta: MetaFunction = () => [{ title: "Blog — Asteriskx" }];
 
+/**
+ * ブログ記事一覧ページ（/blog）。
+ * MDX ファイルを一括インポートし、日付降順で全記事をカード表示する。
+ */
 export default function BlogIndex() {
   useScrollReveal();
 
@@ -43,7 +49,7 @@ export default function BlogIndex() {
             </div>
           )}
           {posts.map((post) => (
-            <article key={post.slug} className="blog-card reveal">
+            <MatrixRainCard key={post.slug} className="blog-card reveal">
               <a href={`/blog/${post.slug}`} className="blog-card-link">
                 <div className="blog-card-meta">
                   <time className="blog-date">{post.date}</time>
@@ -52,7 +58,7 @@ export default function BlogIndex() {
                 <p className="blog-card-desc">{post.description}</p>
                 <span className="blog-card-arrow">[ read ]</span>
               </a>
-            </article>
+            </MatrixRainCard>
           ))}
         </div>
       </section>

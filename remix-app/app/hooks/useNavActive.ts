@@ -1,5 +1,14 @@
 import { useEffect, useState } from "react";
 
+/**
+ * スクロール位置に基づいてアクティブなセクション ID を返すカスタムフック。
+ * 各セクションの `offsetTop - 120px` を閾値とし、超えた最後のセクションを active とする。
+ * ページ末尾 60px 以内では末尾セクションを強制的に active にする。
+ * `sectionIds` は毎回新しい配列リテラルで渡される想定のため、join した文字列を dep にして
+ * 不要な effect 再実行を防ぐ。
+ * @param sectionIds 監視するセクション要素の id 配列（DOM 順と一致すること）
+ * @returns 現在アクティブなセクションの id 文字列（未判定時は空文字列）
+ */
 export function useNavActive(sectionIds: string[]): string {
   const [active, setActive] = useState("");
 

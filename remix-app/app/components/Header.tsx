@@ -4,12 +4,12 @@ import { useNavActive } from "../hooks/useNavActive";
 
 const TITLE = "ぽーとふぉりおっぽいもの";
 
-// ブログ記事数（バッジ表示用）
+/** ブログ記事数（バッジ表示用） */
 const postCount = Object.keys(
   import.meta.glob("../content/blog/*.mdx")
 ).length;
 
-// 最新記事日付（更新情報バッジ用）
+/** 最新記事日付（更新情報バッジ用） */
 const postModules = import.meta.glob<{ frontmatter: { date: string } }>(
   "../content/blog/*.mdx",
   { eager: true }
@@ -18,6 +18,14 @@ const latestDate = Object.values(postModules)
   .map((m) => m.frontmatter?.date ?? "")
   .sort((a, b) => b.localeCompare(a))[0] ?? null;
 
+/**
+ * サイトヘッダーコンポーネント。
+ * - タイプライター演出でタイトルを表示（マウント後 200ms 遅延で開始、1文字 90ms）
+ * - スクロール 40px 超で `.scrolled` クラスを付与しヘッダーを縮小
+ * - ホームページ（`/`）はアンカーリンク、その他ページは `/#section` 形式のリンクを生成
+ * - ブログページでは Blog ナビ項目を常時アクティブ表示
+ * - モバイルではハンバーガーメニューに切り替わる
+ */
 export function Header() {
   const [titleText, setTitleText] = useState("");
   const [menuOpen, setMenuOpen]   = useState(false);
@@ -29,7 +37,7 @@ export function Header() {
 
   const sectionHref = (id: string) => isHome ? `#${id}` : `/#${id}`;
 
-  // Header typewriter
+  // ─── タイプライター ───────────────────────────────────────────────────────────
   // setTimeout 内の setInterval は useEffect の cleanup に届かないため、
   // interval を外側の変数で持ち、両方を cleanup で確実にクリアする
   useEffect(() => {
@@ -48,7 +56,7 @@ export function Header() {
     };
   }, []);
 
-  // Scroll shrink
+  // ─── スクロール縮小 ──────────────────────────────────────────────────────────
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
     window.addEventListener("scroll", onScroll, { passive: true });
@@ -63,7 +71,7 @@ export function Header() {
         <a href={isHome ? "#about" : "/"} className="header-name">
           <span className="header-prompt">›</span>
           <span>{titleText}</span>
-          <span className="header-cursor">_</span>
+          <span className="header-cursor" />
         </a>
 
         <nav className="header-nav">
@@ -97,15 +105,24 @@ export function Header() {
         </button>
       </header>
 
+      {/* オーバーレイ（パネル外タップで閉じる） */}
+      {menuOpen && <div className="mobile-menu-veil" onClick={closeMenu} />}
+
       <div className={`mobile-menu${menuOpen ? " open" : ""}`}>
         <nav>
-          <a href={sectionHref("about")} className="mobile-link" onClick={closeMenu}>About</a>
-          <a href={sectionHref("work")}  className="mobile-link" onClick={closeMenu}>Work</a>
+          <a href={sectionHref("about")} className="mobile-link" onClick={closeMenu}>
+            <span className="nav-num">01.</span>About
+          </a>
+          <a href={sectionHref("work")}  className="mobile-link" onClick={closeMenu}>
+            <span className="nav-num">02.</span>Work
+          </a>
           <a href={sectionHref("blog")} className="mobile-link" onClick={closeMenu}>
-            Blog
+            <span className="nav-num">03.</span>Blog
             {postCount > 0 && <span className="nav-blog-badge">{postCount}</span>}
           </a>
-          <a href={sectionHref("contact")} className="mobile-link" onClick={closeMenu}>Contact</a>
+          <a href={sectionHref("contact")} className="mobile-link" onClick={closeMenu}>
+            <span className="nav-num">04.</span>Contact
+          </a>
         </nav>
       </div>
     </>

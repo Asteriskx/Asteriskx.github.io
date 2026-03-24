@@ -8,6 +8,18 @@ const LOGOS = [
   "/assets/image/logo-v5.png",
 ];
 
+/**
+ * タイピングアニメーションを管理するカスタムフック。
+ * `active` が true になると `text` を `ms` ms 間隔で1文字ずつ出力し、
+ * 完了後 180ms 待って `onDone` を呼び出す。
+ * `onDone` は ref で保持することで deps に含めず、active 変化のたびに
+ * タイピングがリセットされる副作用を防いでいる。
+ * @param text タイピング表示するテキスト
+ * @param ms 1文字あたりの遅延（ミリ秒）
+ * @param active true のとき再生を開始する
+ * @param onDone タイピング完了後に呼ばれるコールバック
+ * @returns 現在表示されているテキスト（途中状態を含む）
+ */
 function useTyped(text: string, ms: number, active: boolean, onDone: () => void) {
   const [out, setOut] = useState("");
   const done = useRef(false);
@@ -40,6 +52,12 @@ function useTyped(text: string, ms: number, active: boolean, onDone: () => void)
   return out;
 }
 
+/**
+ * ヒーローセクション用ターミナル風コンポーネント。
+ * `step` 変数でシーケンスを管理し、`useTyped` で各コマンド・結果を順次タイピング表示する。
+ * step の進行: 0（待機）→ 1（name）→ 2-3（名前出力）→ 4-5（role）→ 6-8（info）→ 9-10（skills）
+ * 右側には {@link LogoSlashReveal} でロゴを交互表示する。
+ */
 export function HeroTerminal() {
   const [step, setStep] = useState(0);
   const next = () => setStep((s) => s + 1);
@@ -70,7 +88,7 @@ export function HeroTerminal() {
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); clearTimeout(t5); };
   }, [step]);
 
-  // Start sequence after mount
+  // マウント後にシーケンスを開始
   useEffect(() => {
     const t = setTimeout(() => setStep(1), 500);
     return () => clearTimeout(t);
@@ -180,6 +198,10 @@ export function HeroTerminal() {
             <span className="htag">Systems</span>
             <span className="htag">Language Design</span>
             <span className="htag">Desktop Apps</span>
+            <span className="htag-pair">
+              <span className="htag htag-graphics">Graphics</span>
+              <span className="htag htag-infra">Infra</span>
+            </span>
           </div>
           <a href="#work" className="hero-cta">
             Work <span className="cta-arrow">↓</span>

@@ -50,11 +50,13 @@ a, button, [role="button"] {
 }
 
 /* 背景キャンバス */
+/* WebGL 初期化中（async）にブラウザが canvas を白塗りするのを防ぐ */
 #bg-canvas {
   position: fixed;
   inset: 0;
   z-index: 0;
   pointer-events: none;
+  background: #181c2a;
   display: block;
   /* Three.js 初期化前の白フラッシュを防ぐ */
   background: #181c2a;
@@ -182,9 +184,21 @@ em {
   font-size: 0.85em;
 }
 
+/* Header: パルスバー（縦棒）— コード的な雰囲気 */
 .header-cursor {
-  color: var(--accent);
-  animation: blink 1s step-end infinite;
+  display: inline-block;
+  width: 2px;
+  height: 0.9em;
+  background: var(--accent);
+  vertical-align: middle;
+  margin-left: 1px;
+  box-shadow: 0 0 6px var(--accent), 0 0 14px rgba(0, 229, 255, 0.45);
+  animation: cursorPulse 1s ease-in-out infinite;
+}
+
+@keyframes cursorPulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 6px var(--accent), 0 0 14px rgba(0, 229, 255, 0.45); }
+  50%       { opacity: 0.15; box-shadow: none; }
 }
 
 .nav-num {
@@ -279,42 +293,92 @@ em {
 /* ===========================
    Mobile Menu
    =========================== */
+
+/* パネル外タップで閉じるためのフルスクリーンオーバーレイ */
+.mobile-menu-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 89;
+  background: rgba(6, 9, 18, 0.55);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  animation: veilIn 0.3s var(--ease) forwards;
+}
+
+@keyframes veilIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
 .mobile-menu {
   display: none;
   position: fixed;
-  inset: 0;
-  background: var(--bg);
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(280px, 78vw);
   z-index: 90;
   flex-direction: column;
-  align-items: center;
   justify-content: center;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.4s var(--ease);
+
+  /* ガラスパネル：透明度を上げ、blur を強めてリッチな質感に */
+  background: rgba(6, 9, 20, 0.55);
+  border-left: 1px solid rgba(0, 229, 255, 0.28);
+  backdrop-filter: blur(32px) saturate(1.6);
+  -webkit-backdrop-filter: blur(32px) saturate(1.6);
+  box-shadow:
+    -12px 0 60px rgba(0, 0, 0, 0.6),
+    -1px 0 0 rgba(0, 229, 255, 0.12),
+    inset 1px 0 0 rgba(255, 255, 255, 0.04);
+
+  transform: translateX(100%);
+  transition: transform 0.4s var(--ease-expo);
 }
 
 .mobile-menu.open {
-  opacity: 1;
-  pointer-events: all;
+  transform: translateX(0);
 }
 
 .mobile-menu nav {
   display: flex;
   flex-direction: column;
-  gap: 2.5rem;
-  text-align: center;
+  padding: 2rem 2rem 2rem 1.6rem;
 }
 
 .mobile-link {
-  font-size: 2.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  font-family: var(--font-mono);
+  font-size: 1.35rem;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.04em;
   color: var(--text-muted);
-  transition: color 0.3s;
+  padding: 1.1rem 0.6rem;
+  border-bottom: 1px solid rgba(0, 229, 255, 0.35);
+  transition: color 0.2s, padding-left 0.25s var(--ease), border-color 0.2s;
+  opacity: 0;
 }
 
-.mobile-link:hover {
-  color: var(--text);
+.mobile-menu.open .mobile-link:nth-child(1) { animation: mlinkIn 0.35s 0.08s var(--ease-expo) forwards; }
+.mobile-menu.open .mobile-link:nth-child(2) { animation: mlinkIn 0.35s 0.14s var(--ease-expo) forwards; }
+.mobile-menu.open .mobile-link:nth-child(3) { animation: mlinkIn 0.35s 0.20s var(--ease-expo) forwards; }
+.mobile-menu.open .mobile-link:nth-child(4) { animation: mlinkIn 0.35s 0.26s var(--ease-expo) forwards; }
+
+@keyframes mlinkIn {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.mobile-link:last-child {
+  border-bottom: none;
+}
+
+.mobile-link:hover,
+.mobile-link:active {
+  color: var(--accent);
+  padding-left: 1rem;
+  border-color: rgba(0, 229, 255, 0.15);
 }
 
 /* ===========================
@@ -346,7 +410,10 @@ em {
   font-size: 0.95rem;
   margin-bottom: 2.4rem;
   opacity: 0;
-  animation: fadeIn 0.6s 0.1s var(--ease) forwards;
+  /* fadeIn 完了後に PWM グロー開始。forwards で opacity:1 を維持しつつ glow が重なる */
+  animation:
+    fadeIn   0.6s 0.1s var(--ease) forwards,
+    termPwm  5.0s 1.2s ease-in-out infinite;
 
   /* ターミナルウィンドウ */
   position: relative;
@@ -477,8 +544,10 @@ em {
   color: var(--text);
 }
 
+/* HeroTerminal: グロー点滅（▌）— ターミナル的な雰囲気 */
 .term-blink {
   color: var(--accent);
+  text-shadow: 0 0 6px var(--accent), 0 0 14px rgba(0,229,255,0.55);
   animation: blink 0.8s step-end infinite;
 }
 
@@ -555,14 +624,9 @@ em {
   display: block;
 }
 
-.line-1 {
-  animation: none;
-}
-
 .line-2 {
   color: var(--accent);
   text-shadow: 0 0 30px rgba(0, 229, 255, 0.25);
-  animation: none;
 }
 
 .hero-desc {
@@ -570,7 +634,6 @@ em {
   color: var(--text-muted);
   line-height: 1.9;
   margin-bottom: 1.4rem;
-  animation: none;
 }
 
 .hero-cta {
@@ -581,7 +644,6 @@ em {
   font-size: 0.78rem;
   letter-spacing: 0.12em;
   color: var(--accent);
-  animation: none;
   transition: gap 0.3s var(--ease);
 }
 
@@ -604,8 +666,6 @@ em {
   flex-wrap: wrap;
   gap: 0.5rem;
   margin-bottom: 1.6rem;
-  opacity: 1;
-  animation: none;
 }
 
 .htag {
@@ -629,6 +689,24 @@ em {
   color: #b39ddb;
   border-color: rgba(179, 157, 219, 0.35);
   background: rgba(179, 157, 219, 0.06);
+}
+
+/* GraphicsとInfraは常にペアで隣接させるためグループ化 */
+.htag-pair {
+  display: inline-flex;
+  gap: 0.5rem;
+}
+
+.htag.htag-graphics {
+  color: #ffcc80;
+  border-color: rgba(255, 204, 128, 0.35);
+  background: rgba(255, 204, 128, 0.06);
+}
+
+.htag.htag-infra {
+  color: #ef9a9a;
+  border-color: rgba(239, 154, 154, 0.35);
+  background: rgba(239, 154, 154, 0.06);
 }
 
 .hero-scroll-line {
@@ -700,6 +778,10 @@ em {
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--text);
+  /* reveal と連動して少し遅れてフェードイン */
+  transform: translateX(-8px);
+  transition: transform 0.7s var(--ease-expo) 0.15s, opacity 0.5s ease 0.15s;
+  opacity: 0;
 }
 
 .sec-label::before {
@@ -711,13 +793,6 @@ em {
   color: var(--accent);
   opacity: 0.45;
   vertical-align: middle;
-}
-
-.sec-label {
-  /* reveal と連動して少し遅れてフェードイン */
-  transform: translateX(-8px);
-  transition: transform 0.7s var(--ease-expo) 0.15s, opacity 0.5s ease 0.15s;
-  opacity: 0;
 }
 .section-head.visible .sec-label {
   transform: translateX(0);
@@ -732,6 +807,7 @@ em {
 }
 
 .work-item {
+  position: relative;
   display: grid;
   grid-template-columns: 72px 130px 1fr auto;
   gap: 1.5rem;
@@ -851,11 +927,44 @@ em {
   font-family: var(--font-mono);
   font-size: 0.7rem;
   letter-spacing: 0.03em;
-  color: #7ecfdd;
-  border: 1px solid rgba(126, 207, 221, 0.3);
-  background: rgba(126, 207, 221, 0.05);
   padding: 0.18rem 0.65rem;
   border-radius: 999px;
+  border: 1px solid;
+}
+
+/* sys = cyan（Systems: C / C# / Rust …） */
+.stack-tag--sys {
+  color: #7ecfdd;
+  border-color: rgba(126, 207, 221, 0.32);
+  background: rgba(126, 207, 221, 0.06);
+}
+
+/* app = green（App: Python / Java …） */
+.stack-tag--app {
+  color: #a5d6a7;
+  border-color: rgba(165, 214, 167, 0.32);
+  background: rgba(165, 214, 167, 0.06);
+}
+
+/* web = purple（Web/Desktop: TypeScript / .NET / WPF …） */
+.stack-tag--web {
+  color: #b39ddb;
+  border-color: rgba(179, 157, 219, 0.32);
+  background: rgba(179, 157, 219, 0.06);
+}
+
+/* gfx = amber（Graphics: Three.js / Processing …） */
+.stack-tag--gfx {
+  color: #ffcc80;
+  border-color: rgba(255, 204, 128, 0.32);
+  background: rgba(255, 204, 128, 0.06);
+}
+
+/* infra = coral（Infra/Tools: GitHub Pages / GCC / VSCode API …） */
+.stack-tag--infra {
+  color: #ef9a9a;
+  border-color: rgba(239, 154, 154, 0.32);
+  background: rgba(239, 154, 154, 0.06);
 }
 
 .work-link {
@@ -1119,11 +1228,239 @@ em {
   to   { opacity: 1; }
 }
 
+@keyframes fadeUpIn {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 /* ページ遷移フェードイン（root.tsx で pathname をキーに発火） */
 .page-transition {
   animation: fadeIn 0.4s var(--ease) both;
 }
 
+/* ===========================
+   Scanline Heading
+   =========================== */
+/* sec-label 直下の span に適用。::before が '// ' を担うため、
+   テキスト本体だけを囲む .sec-scan に clip-path アニメを付与する */
+.sec-scan {
+  position: relative;
+  display: inline-block;
+  overflow: hidden;
+  /* スキャン前: アウトライン（文字が透明でストロークのみ）*/
+  color: transparent;
+  -webkit-text-stroke: 1px rgba(226, 232, 240, 0.2);
+}
+/* ::before でテキストを塗り込む — scan クラス付与で右→左に clip-path が開く */
+.sec-scan::before {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  color: var(--text);
+  clip-path: inset(0 100% 0 0);
+  -webkit-text-stroke: 0;
+}
+.sec-scan.scan::before {
+  animation: scanReveal 1.0s cubic-bezier(0.19, 1, 0.22, 1) forwards;
+}
+/* ::after がスキャン光線本体 */
+.sec-scan::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 3px;
+  background: linear-gradient(to bottom, transparent, var(--accent), transparent);
+  box-shadow: 0 0 12px var(--accent), 0 0 24px rgba(0, 229, 255, 0.5);
+  left: -4px;
+  pointer-events: none;
+}
+.sec-scan.scan::after {
+  animation: scanLine 1.0s cubic-bezier(0.19, 1, 0.22, 1) forwards;
+}
+/* ターミナル枠 PWM グロー: デューティ比が変わる2連パルス → 長い休止 */
+@keyframes termPwm {
+  /* 強パルス */
+  0%   {
+    border-color: rgba(0, 229, 255, 0.25);
+    box-shadow: 0 0 0 1px rgba(0,229,255,0.10), 0 16px 56px rgba(0,0,0,0.40), 0 0 80px rgba(0,229,255,0.10);
+  }
+  6%   {
+    border-color: rgba(0, 229, 255, 0.60);
+    box-shadow: 0 0 0 1px rgba(0,229,255,0.28), 0 16px 56px rgba(0,0,0,0.40), 0 0 120px rgba(0,229,255,0.28), 0 0 28px rgba(0,229,255,0.18);
+  }
+  /* 弱パルス */
+  14%  {
+    border-color: rgba(0, 229, 255, 0.25);
+    box-shadow: 0 0 0 1px rgba(0,229,255,0.10), 0 16px 56px rgba(0,0,0,0.40), 0 0 80px rgba(0,229,255,0.10);
+  }
+  20%  {
+    border-color: rgba(0, 229, 255, 0.42);
+    box-shadow: 0 0 0 1px rgba(0,229,255,0.18), 0 16px 56px rgba(0,0,0,0.40), 0 0 100px rgba(0,229,255,0.18);
+  }
+  /* 休止 */
+  28%, 100% {
+    border-color: rgba(0, 229, 255, 0.25);
+    box-shadow: 0 0 0 1px rgba(0,229,255,0.10), 0 16px 56px rgba(0,0,0,0.40), 0 0 80px rgba(0,229,255,0.10);
+  }
+}
+
+@keyframes scanReveal {
+  to { clip-path: inset(0 0% 0 0); }
+}
+@keyframes scanLine {
+  0%   { left: -4px; opacity: 1; }
+  75%  { opacity: 1; }
+  100% { left: calc(100% + 4px); opacity: 0; }
+}
+
+/* ===========================
+   Laser Border (Work cards)
+   =========================== */
+.work-laser {
+  position: absolute;
+  inset: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+.work-laser rect {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  /* 周囲長より大きい値で初期状態を非表示にする */
+  stroke-dasharray: 3000;
+  stroke-dashoffset: 3000;
+  filter: drop-shadow(0 0 4px var(--accent));
+  transition: stroke-dashoffset 0s;
+}
+.work-item:hover .work-laser rect {
+  animation: laserTrace 0.9s cubic-bezier(0.19, 1, 0.22, 1) forwards;
+}
+@keyframes laserTrace {
+  to { stroke-dashoffset: 0; }
+}
+
+/* ===========================
+   Scroll Indicator
+   =========================== */
+/* 右端固定。モバイルは非表示 */
+.scroll-indicator {
+  position: fixed;
+  right: 1.6rem;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0;
+  pointer-events: none;
+}
+
+/* 縦のグロートラックライン */
+.si-track {
+  position: absolute;
+  right: 2px;
+  top: 0; bottom: 0;
+  width: 1px;
+  background: rgba(0, 229, 255, 0.12);
+}
+/* 流れ落ちるハイライト */
+.si-track::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  width: 3px; height: 30%;
+  background: linear-gradient(to bottom, transparent, var(--accent), transparent);
+  box-shadow: 0 0 8px var(--accent);
+  animation: siScroll 2.8s ease-in-out infinite;
+}
+@keyframes siScroll {
+  0%   { top: 0%;   opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { top: 70%;  opacity: 0; }
+}
+
+.si-items {
+  display: flex;
+  flex-direction: column;
+  gap: 1.4rem;
+  align-items: flex-end;
+  pointer-events: all;
+}
+
+.si-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.si-label {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.2);
+  transition: color 0.3s;
+  text-transform: lowercase;
+}
+
+.si-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: rgba(0, 229, 255, 0.25);
+  border: 1px solid rgba(0, 229, 255, 0.4);
+  transition: background 0.3s, box-shadow 0.3s;
+  flex-shrink: 0;
+}
+
+.si-item.active .si-label {
+  color: var(--accent);
+}
+.si-item.active .si-dot {
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+}
+.si-item:hover .si-label {
+  color: rgba(0, 229, 255, 0.6);
+}
+
+/* ===========================
+   Matrix Rain (Blog cards)
+   =========================== */
+.matrix-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%; height: 100%;
+  border-radius: 6px;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+}
+/* MatrixRainCard の article:hover で canvas を表示 */
+.blog-card:hover .matrix-canvas { opacity: 1; }
+/* ホバー時にタイトルをアクセントカラーでグロー */
+.blog-card:hover .blog-card-title {
+  color: var(--accent);
+  text-shadow: 0 0 12px rgba(0, 229, 255, 0.5);
+}
+/* blog-card-link など前面コンテンツを canvas より上に置く */
+.blog-card-link { position: relative; z-index: 1; }
+
+@media (max-width: 768px) {
+  /* モバイル: トラック・ラベルを非表示にしてドットのみのコンパクト版 */
+  .scroll-indicator {
+    right: 0.7rem;
+    gap: 0;
+  }
+  .si-track  { display: none; }
+  .si-label  { display: none; }
+  .si-items  { gap: 1.0rem; }
+  .si-item   { pointer-events: all; padding: 4px; }
+  .si-dot    { width: 4px; height: 4px; }
+}
 
 /* ===========================
    Blog
@@ -1134,6 +1471,7 @@ em {
 }
 
 .blog-card {
+  position: relative;
   border: 1px solid rgba(0, 229, 255, 0.22);
   border-radius: 6px;
   background: rgba(6, 10, 20, 0.28);
@@ -1179,10 +1517,6 @@ em {
   color: var(--text);
   margin: 0;
   transition: color 0.3s var(--ease);
-}
-
-.blog-card:hover .blog-card-title {
-  color: var(--accent);
 }
 
 .blog-card-desc {
@@ -1315,6 +1649,7 @@ em {
 /* --- Blog Post --- */
 .blog-post-section {
   padding-top: 8rem;
+  animation: fadeUpIn 1.0s var(--ease) both;
 }
 
 .blog-post-header {
@@ -1452,7 +1787,22 @@ em {
   }
 
   .mobile-menu {
-    display: flex;
+    display: flex; /* 768px 以下で右ドロワーとして表示 */
+  }
+
+  .menu-toggle {
+    /* ハンバーガーボタンをメニュー open 時は前面に */
+    z-index: 91;
+  }
+
+  /* ── Footer ── */
+  .footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1.6rem 1.5rem 2.4rem;
+    /* back-to-top ボタン（right:2rem, 約90px幅）との干渉を回避 */
+    padding-right: 6rem;
   }
 
   /* ── Sections ── */
@@ -1478,16 +1828,75 @@ em {
   }
 
   .term-logo {
-    display: none;
+    order: -1;
+    display: flex;
+    justify-content: center;
+    padding: 2.8rem 0 1.4rem;
+    width: 100%;
+  }
+
+  .term-logo .slash-logo-wrap {
+    width: 180px;
+    height: 180px;
   }
 
   .hero-terminal {
     font-size: 0.82rem;
   }
 
+  /* スキル行にカテゴリバッジが出るので凡例タグは不要 */
+  .hero-tags {
+    display: none;
+  }
+
   .term-skill-row {
-    white-space: normal;
+    display: flex;
+    align-items: center;
     flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-bottom: 0.4rem;
+    white-space: normal;
+    background: none;
+    border: none;
+    padding: 0;
+  }
+
+  .term-sk-cat {
+    display: inline-block;
+    font-size: 0.68rem;
+    font-weight: bold;
+    white-space: nowrap;
+    padding: 0.15rem 0.6rem;
+    border-radius: 999px;
+    letter-spacing: 0.03em;
+  }
+
+  /* カテゴリ順に htag と同系色のバッジ */
+  .term-skill-row:nth-child(1) .term-sk-cat {
+    color: #7ecfdd; border: 1px solid rgba(126,207,221,0.4); background: rgba(126,207,221,0.08);
+  }
+  .term-skill-row:nth-child(2) .term-sk-cat {
+    color: #a5d6a7; border: 1px solid rgba(165,214,167,0.4); background: rgba(165,214,167,0.08);
+  }
+  .term-skill-row:nth-child(3) .term-sk-cat {
+    color: #b39ddb; border: 1px solid rgba(179,157,219,0.4); background: rgba(179,157,219,0.08);
+  }
+  .term-skill-row:nth-child(4) .term-sk-cat {
+    color: #ffcc80; border: 1px solid rgba(255,204,128,0.4); background: rgba(255,204,128,0.08);
+  }
+  .term-skill-row:nth-child(5) .term-sk-cat {
+    color: #ef9a9a; border: 1px solid rgba(239,154,154,0.4); background: rgba(239,154,154,0.08);
+  }
+
+  .term-sk-sep {
+    display: none;
+  }
+
+  .term-sk-val {
+    font-size: 0.75rem;
+    white-space: normal;
+    word-break: break-word;
+    color: var(--text-muted);
   }
 
   /* ── Work ── */
@@ -1584,13 +1993,6 @@ em {
     padding: 2rem 1rem 1.2rem;
   }
 
-  .term-sk-cat {
-    display: none;
-  }
-
-  .term-sk-sep {
-    display: none;
-  }
 
   /* ── Work ── */
   .work-item {
@@ -1675,6 +2077,7 @@ em {
 }
 
 .lo-titlebar {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1693,10 +2096,15 @@ em {
 .lo-dot--g { background: #28c840; }
 
 .lo-title-text {
-  margin-left: 8px;
+  /* タイトルを dots に依存せず titlebar 全体の中央に配置 */
+  position: absolute;
+  left: 0;
+  right: 0;
+  text-align: center;
   font-size: 0.75rem;
   color: rgba(255, 255, 255, 0.35);
-  font-family: monospace;
+  font-family: Consolas, 'Cascadia Code', 'Courier New', monospace;
+  pointer-events: none;
 }
 
 .lo-body {
@@ -1705,7 +2113,7 @@ em {
 }
 
 .lo-line {
-  font-family: "Courier New", Courier, monospace;
+  font-family: Consolas, 'Cascadia Code', 'Courier New', monospace;
   font-size: 0.9rem;
   line-height: 2;
   margin: 0;
@@ -1721,7 +2129,7 @@ em {
 .lo-success   { color: #4dffa0; }
 .lo-welcome   { color: #ffffff; }
 .lo-banner-art {
-  font-family: "Courier New", Courier, monospace;
+  font-family: Consolas, 'Cascadia Code', 'Courier New', monospace;
   font-size: 0.6rem;
   line-height: 1.4;
   color: #00e5ff;
@@ -1731,10 +2139,10 @@ em {
 }
 
 .lo-banner-net {
-  font-family: "Courier New", Courier, monospace;
+  font-family: Consolas, 'Cascadia Code', 'Courier New', monospace;
   font-size: 0.6rem;
   line-height: 1.4;
-  color: rgba(0,229,255,0.45);
+  color: rgba(0,229,255,0.85);
   margin-top: 0;
   white-space: pre;
 }
@@ -1742,8 +2150,10 @@ em {
 .lo-launch    { color: #00e5ff; margin-top: 12px; }
 .lo-skip-hint { color: rgba(255,255,255,0.5); font-size: 0.72rem; margin-top: 4px; }
 
+/* LoginOverlay: グロー点滅（_）— ターミナル的な雰囲気 */
 .lo-cursor {
   color: #00e5ff;
+  text-shadow: 0 0 6px #00e5ff, 0 0 14px rgba(0,229,255,0.55);
   animation: lo-blink 0.75s step-end infinite;
 }
 .lo-cursor--off { visibility: hidden; }
@@ -1764,7 +2174,7 @@ em {
 .lo-nf-art { flex-shrink: 0; }
 
 .lo-nf-artline {
-  font-family: "Courier New", Courier, monospace;
+  font-family: Consolas, 'Cascadia Code', 'Courier New', monospace;
   font-size: 0.33rem;
   line-height: 1.18;
   color: #7ecfdd;
@@ -1774,7 +2184,7 @@ em {
 .lo-nf-info { padding-top: 2px; }
 
 .lo-nf-row {
-  font-family: "Courier New", Courier, monospace;
+  font-family: Consolas, 'Cascadia Code', 'Courier New', monospace;
   font-size: 0.85rem;
   line-height: 1.85;
 }
