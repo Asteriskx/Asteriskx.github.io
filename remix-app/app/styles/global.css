@@ -778,6 +778,7 @@ em {
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--text);
+  white-space: nowrap; /* // と見出しテキストが折り返されないよう固定 */
   /* reveal と連動して少し遅れてフェードイン */
   transform: translateX(-8px);
   transition: transform 0.7s var(--ease-expo) 0.15s, opacity 0.5s ease 0.15s;
@@ -1608,7 +1609,7 @@ em {
   flex-direction: column;
   gap: 0.55rem;
   font-family: var(--font-mono);
-  font-size: 0.85rem;
+  font-size: 1rem;
 }
 
 .blog-hydrate-comment {
@@ -1727,6 +1728,29 @@ em {
 }
 
 .blog-content li { margin: 0.35rem 0; }
+
+.blog-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+  font-size: 0.9rem;
+}
+
+.blog-content th,
+.blog-content td {
+  padding: 0.6rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid rgba(0, 229, 255, 0.1);
+  white-space: nowrap;
+}
+
+.blog-content th {
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+  border-bottom-color: rgba(0, 229, 255, 0.25);
+}
 
 .blog-content code {
   font-family: var(--font-mono);
@@ -2242,11 +2266,10 @@ em {
   }
 
   .lo-nf-artline {
-    /* AA_W=128文字がパディング込みで常に収まるよう vw ベースで計算。
-     * lo-body の横パディング 14px×2=28px を差し引いた幅を 128 等分する。
-     * フォントブースト無効化（text-size-adjust）と組み合わせて使用。 */
-    font-size: calc((90vw - 32px) / 128);
-    line-height: 1.15;
+    /* font-size はデスクトップと同じ値を維持し、コンテナ側の transform: scale() で縮小する。
+     * ブラウザの最小フォントサイズ制限（8〜10px）を回避するための方式変更。 */
+    font-size: 0.33rem;
+    line-height: 1.18;
   }
 
   .lo-nf-info {
@@ -2300,8 +2323,8 @@ em {
   }
 
   .lo-nf-artline {
-    font-size: calc((90vw - 32px) / 128);
-    line-height: 1.15;
+    font-size: 0.33rem;
+    line-height: 1.18;
   }
 
   .lo-nf-info {

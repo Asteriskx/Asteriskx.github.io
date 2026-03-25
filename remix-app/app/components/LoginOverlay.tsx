@@ -149,6 +149,28 @@ export function LoginOverlay({ onDone }: Props) {
   const pendingTid = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (pendingTid.current) clearTimeout(pendingTid.current); }, []);
 
+  // ASCII アートコンテナの ref。neofetch フェーズで transform scale 計算に使用
+  const artRef = useRef<HTMLDivElement>(null);
+
+  // neofetch 表示後、アート div の実幅を計測して親に収まるよう transform: scale() を適用。
+  // font-size を縮小する方法はブラウザの最小フォントサイズ制限（8〜10px）に阻まれるため、
+  // post-render の視覚縮小で回避する。高さも scale 後の値に補正してレイアウトのズレを防ぐ。
+  useEffect(() => {
+    if (phase !== "neofetch") return;
+    const el = artRef.current;
+    if (!el) return;
+    const parent = el.parentElement;
+    if (!parent) return;
+    const naturalW  = el.scrollWidth;
+    const available = parent.clientWidth;
+    if (naturalW > 0 && naturalW > available) {
+      const scale = available / naturalW;
+      el.style.transformOrigin = "top left";
+      el.style.transform       = `scale(${scale})`;
+      el.style.height          = `${el.offsetHeight * scale}px`;
+    }
+  }, [phase]);
+
   useEffect(() => {
     imageToAscii("/assets/image/logo-v4.png", AA_W, AA_H).then(setArt);
   }, []);
@@ -301,7 +323,7 @@ export function LoginOverlay({ onDone }: Props) {
             <>
               <p className="lo-line">&nbsp;</p>
               <div className="lo-nf">
-                <div className="lo-nf-art">
+                <div className="lo-nf-art" ref={artRef}>
                   {asciiArt.map((line, i) => (
                     <div key={i} className="lo-nf-artline">{line}</div>
                   ))}
