@@ -2,6 +2,7 @@ import { reactRouter } from "@react-router/dev/vite";
 import mdx from "@mdx-js/rollup";
 import remarkFrontmatter from "remark-frontmatter";
 import remarkMdxFrontmatter from "remark-mdx-frontmatter";
+import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import { defineConfig, type Plugin } from "vite";
 
@@ -35,7 +36,7 @@ function injectCriticalBg(): Plugin {
 export default defineConfig({
   plugins: [
     mdx({
-      remarkPlugins: [remarkFrontmatter, remarkMdxFrontmatter],
+      remarkPlugins: [remarkFrontmatter, remarkMdxFrontmatter, remarkGfm],
       rehypePlugins: [rehypeHighlight],
     }),
     injectCriticalBg(),
