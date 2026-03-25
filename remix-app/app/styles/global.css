@@ -2043,6 +2043,10 @@ em {
 /* ─── Login Overlay ──────────────────────────────────────────────────────── */
 
 .lo-overlay {
+  /* Android Chrome のフォントブースト（Text Size Adjustment）を無効化。
+   * 極小フォント（0.21rem など）が自動拡大されると ASCII アートが崩れるため。 */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   position: fixed;
   inset: 0;
   z-index: 99999;
@@ -2136,6 +2140,12 @@ em {
   margin: 10px 0 4px;
   white-space: pre;
   overflow-x: auto;
+  animation: lo-banner-pulse 2.5s ease-in-out infinite;
+}
+
+@keyframes lo-banner-pulse {
+  0%, 100% { text-shadow: 0 0 6px #00e5ff, 0 0 18px rgba(0,229,255,0.45); }
+  50%       { text-shadow: 0 0 10px #00e5ff, 0 0 28px rgba(0,229,255,0.7), 0 0 48px rgba(0,229,255,0.2); }
 }
 
 .lo-banner-net {
@@ -2171,7 +2181,7 @@ em {
   align-items: flex-start;
 }
 
-.lo-nf-art { flex-shrink: 0; }
+.lo-nf-art { flex-shrink: 0; overflow: hidden; max-width: 100%; }
 
 .lo-nf-artline {
   font-family: Consolas, 'Cascadia Code', 'Courier New', monospace;
@@ -2232,7 +2242,10 @@ em {
   }
 
   .lo-nf-artline {
-    font-size: 0.21rem;
+    /* AA_W=128文字がパディング込みで常に収まるよう vw ベースで計算。
+     * lo-body の横パディング 14px×2=28px を差し引いた幅を 128 等分する。
+     * フォントブースト無効化（text-size-adjust）と組み合わせて使用。 */
+    font-size: calc((90vw - 32px) / 128);
     line-height: 1.15;
   }
 
@@ -2261,5 +2274,43 @@ em {
 
   .lo-launch .lo-bar {
     display: none;
+  }
+}
+
+/* スマホ横向き（iPhone など height が小さい端末）向け調整。
+ * 縦に積み上がるコンテンツが画面高さを超えるため、ボックスを画面内に収めスクロール可能にする。
+ * max-width: 600px との併用で「横向きスマホ」だけを対象にする。 */
+@media (max-height: 480px) {
+  .lo-box {
+    max-height: 100dvh;
+    overflow-y: auto;
+  }
+
+  .lo-body {
+    padding: 12px 14px 16px;
+  }
+
+  .lo-line {
+    line-height: 1.5;
+  }
+
+  .lo-nf {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .lo-nf-artline {
+    font-size: calc((90vw - 32px) / 128);
+    line-height: 1.15;
+  }
+
+  .lo-nf-info {
+    padding-top: 0;
+    width: 100%;
+  }
+
+  .lo-nf-row {
+    font-size: 0.75rem;
+    line-height: 1.6;
   }
 }

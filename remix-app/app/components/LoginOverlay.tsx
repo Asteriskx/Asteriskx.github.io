@@ -28,8 +28,12 @@ const NET_BANNER = [
   " (_)_| \\_|_____| |_|  ",
 ];
 
-/** ASTERISKX と .net を横並びに結合したフルバナー */
-const FULL_BANNER = WELCOME_BANNER.map((line, i) => line + (NET_BANNER[i] ?? ""));
+/** ASTERISKX と .net を横並びに結合したフルバナー。
+ *  WELCOME_BANNER の行長が1〜2文字ばらつくため padEnd で揃えてから結合する */
+const BANNER_WIDTH = Math.max(...WELCOME_BANNER.map(l => l.length));
+const FULL_BANNER = WELCOME_BANNER.map((line, i) =>
+  line.padEnd(BANNER_WIDTH) + (NET_BANNER[i] ?? "")
+);
 
 /** ASCII アートの横幅（文字数）。W:H = 文字高:文字幅 の比率に合わせて縦横比を保持する */
 const AA_W = 128;
