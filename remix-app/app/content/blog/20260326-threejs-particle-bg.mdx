@@ -1,0 +1,224 @@
+---
+title: "Three.js パーティクル背景の実装メモ"
+date: "2026-03-26"
+description: "ポートフォリオ背景の Three.js パーティクルアニメーション実装記録。Ping-Pong RT・フェーズサイクル・Sobel NMS エッジ検出・雨滴波紋エフェクトまで。"
+---
+
+import { BlogToc } from "../../components/BlogToc";
+import { BgCanvasDemo } from "../../components/BgCanvasDemo";
+
+# Three.js パーティクル背景の実装メモ
+
+<BlogToc items={[
+  { id: "s1", label: "完成形と概要" },
+  { id: "s2", label: "ファイル構成" },
+  { id: "s3", label: "SSG との統合" },
+  { id: "s4", label: "Ping-Pong レンダーターゲット" },
+  { id: "s5", label: "フェーズサイクル" },
+  { id: "s6", label: "アイコンエッジ検出（Sobel + NMS）" },
+  { id: "s7", label: "雨滴波紋エフェクト" },
+  { id: "s8", label: "ハマりポイントまとめ" },
+]} />
+
+---
+
+<h2 id="s1">01. 完成形と概要</h2>
+
+このサイトの背景で動いているパーティクルアニメーション、地味に作り込んでいる。
+下のデモで触れるので試してみてほしい（クリックで波紋が広がる）。
+
+<BgCanvasDemo height={420} />
+
+ざっくり何が起きているかというと：
+
+- 2800 個のパーティクルが螺旋を描きながら自分のアイコン形状に収束していく
+- 収束後は脈動しながらアイコンを形成し続ける（FORMED フェーズ）
+- 一定時間後に爆散、また収束を繰り返す
+- 収束・爆散中はパーティクルにトレイル（尾）がつく
+- FORMED 中は雨滴が背景星を揺らす波紋エフェクトが入る
+- クリックすると波紋リングがスポーンする
+
+技術的に面白かったのは **トレイル残像の実装**（Ping-Pong RT）と **アイコン形状の抽出**（Sobel NMS）の2点。
+
+---
+
+<h2 id="s2">02. ファイル構成</h2>
+
+```
+remix-app/app/
+  components/
+    BgCanvas.tsx     # React コンポーネント（useEffect でキャンバス管理）
+  lib/
+    initBg.ts        # Three.js アニメーション本体（純粋な TS ロジック）
+```
+
+**BgCanvas.tsx** は React の責務だけを担う薄いラッパー。
+キャンバス要素の ref 管理・動的 import・クリーンアップのみ。
+
+**initBg.ts** が実体。
+Three.js を引数で受け取る関数として設計しているのは、SSG ビルド時（Node.js 環境）に `import "three"` が実行されないようにするため。
+
+```ts
+// BgCanvas.tsx の useEffect 内
+const THREE = await import("three");
+const { initBg } = await import("../lib/initBg");
+cleanup = initBg(canvasRef.current, THREE, iconDataUrls, onFrame);
+```
+
+---
+
+<h2 id="s3">03. SSG との統合</h2>
+
+React Router v7 の SSG では、ページは Node.js でビルド時に HTML 化される。
+`window` も `document` も存在しないので、Three.js を普通に import するとビルドが落ちる。
+
+解決策は **`ClientOnly` コンポーネント + 動的 import** の組み合わせ。
+
+```tsx
+// root.tsx
+<ClientOnly fallback={null}>
+  {() => <BgCanvas />}
+</ClientOnly>
+```
+
+`ClientOnly` はブラウザでのみレンダリングし、`BgCanvas` 内の `useEffect` で `import("three")` を呼ぶことで、Three.js のコードが Node.js に触れることはない。
+
+さらに `BgCanvas` を root.tsx に置いてページ遷移でも **アンマウントしない** ようにしている。
+ページ移動のたびに Three.js の初期化・破棄が走るのを防ぐため。
+
+---
+
+<h2 id="s4">04. Ping-Pong レンダーターゲット</h2>
+
+パーティクルに **尾（トレイル）** をつけたかった。
+普通に `requestAnimationFrame` でキャンバスをクリアしながら描くと残像は残らない。
+
+解決策が **Ping-Pong レンダーターゲット**（RTT）。
+
+```
+フレーム N の処理:
+  rtA に描画開始
+    └─ rtB（前フレーム）をブリット
+    └─ フェードクワッド（背景色へ少し近づける）で rtB を薄める
+    └─ 星・パーティクルを描画
+  rtA を画面に出力
+  rtA と rtB をスワップ（次フレームの「前フレーム」が rtA になる）
+```
+
+毎フレーム前フレームを少し暗くして重ねることで、自然にフェードする残像が生まれる。
+`fadeMat.opacity` をフェーズごとに変えることで、GATHERING 中は残像を短く・DISPERSING 中は長くしている。
+
+```ts
+fadeMat.opacity = phase === "GATHERING" ? 0.28 : phase === "DISPERSING" ? 0.22 : 0.12;
+```
+
+数値が大きいほど「前フレームを強く暗くする」→ トレイルが短くなる。
+
+---
+
+<h2 id="s5">05. フェーズサイクル</h2>
+
+アニメーションは 4 フェーズのループで管理している。
+
+| フェーズ | フレーム数 | 内容 |
+|----------|-----------|------|
+| FLYING | 120 | 不可視。画像ロード中に円ターゲットへ事前収束させる準備フェーズ |
+| GATHERING | 300 | 螺旋を描きながらアイコン形状へ収束。トレイルあり |
+| FORMED | 300 | アイコン形状を維持しつつ脈動。雨滴波紋が入る |
+| DISPERSING | 100 | 初期シェイク → 中心から爆散。トレイルあり |
+
+実際には **FLYING は起動時の1回だけ**で、以降は `GATHERING → FORMED → DISPERSING → GATHERING ...` のループ。
+
+GATHERING フェーズの螺旋は、目標方向に垂直な速度成分を加えることで実現している。
+
+```ts
+// 螺旋成分：目標方向に垂直な速度を加え銀河の腕のような軌跡を生む
+const spiralStrength = Math.max(0, 1.0 - progress * 1.5) * 0.12;
+const perpX = -dy / dist;
+const perpY =  dx / dist;
+p.x += (p.tx - p.x) * lerpT + perpX * Math.min(dist, 80) * spiralStrength;
+```
+
+`progress` が上がるにつれ螺旋成分がゼロになり、最終的に直線収束に切り替わる。
+
+---
+
+<h2 id="s6">06. アイコンエッジ検出（Sobel + NMS）</h2>
+
+パーティクルの収束先（ターゲット座標）はアイコン PNG の **エッジ** から抽出している。
+単純にランダムサンプリングすると塗りつぶしになって輪郭感が出ない。
+
+処理の流れ：
+
+**① Sobel フィルタで勾配計算**
+
+各ピクセルの輝度に 3×3 Sobel カーネルを適用し、エッジの強さ（magnitude）と方向（gradX/gradY）を求める。
+
+```ts
+const gx = -neighbors[0] - 2 * neighbors[3] - neighbors[5]
+         +  neighbors[2] + 2 * neighbors[4] + neighbors[7];
+const gy = -neighbors[0] - 2 * neighbors[1] - neighbors[2]
+         +  neighbors[5] + 2 * neighbors[6] + neighbors[7];
+```
+
+**② 非最大値抑制（NMS）でエッジを 1px に細線化**
+
+Sobel だけだと境界が数ピクセル幅になる。
+勾配方向の前後ピクセルと比較し、極大でないピクセルを捨てることで 1px のエッジだけ残す。
+
+**③ アルファ境界を追加サンプリング**
+
+PNG の不透明→透明の境界ピクセルは Sobel では拾えない場合がある。
+`alpha >= 30` かつ隣接ピクセルに `alpha < 30` があるピクセルを 2 倍の密度で追加している。
+
+```ts
+const onAlphaBoundary =
+  alpha(x, y) >= 30 &&
+  (alpha(x - 1, y) < 30 || alpha(x + 1, y) < 30 || ...);
+if (onAlphaBoundary) {
+  pts.push(...); pts.push(...); // 2倍密度
+}
+```
+
+NMS threshold は `26`。
+低すぎるとノイズだらけ、高すぎると細部が消える。
+チューニングの結果この値に落ち着いた。
+
+---
+
+<h2 id="s7">07. 雨滴波紋エフェクト</h2>
+
+FORMED フェーズ中、300〜600ms ランダム間隔で画面内にランダムな「雨滴」をスポーンさせ、背景星（bgStars）に衝撃を与えて揺らすエフェクト。
+
+```ts
+// 近距離での爆発的な力を抑えるため上限 5 でクランプ
+const force = Math.min((drop.strength * 40) / (wd * 0.03 + 1), 5);
+star.vx += (wx / wd) * force;
+star.vy += (wy / wd) * force;
+```
+
+雨滴の `strength` は毎フレーム `* 0.97` で減衰し、`0.05` を下回ったら配列から除去。
+星は波紋後に元の位置へスプリング力で戻る。
+
+```ts
+// 元位置への引き戻し
+star.vx += (star.ox - star.x) * 0.02;
+star.vx *= 0.88; // 減衰
+```
+
+パーティクル本体はノータッチ。
+背景星だけを揺らすことで、「水面に雨が落ちてアイコンの周りが揺れる」ような演出になっている。
+
+---
+
+<h2 id="s8">08. ハマりポイントまとめ</h2>
+
+| 問題 | 原因 | 解決策 |
+|------|------|--------|
+| 起動時に白く発光する | WebGL デフォルト状態でキャンバスが白になる | `setClearColor(0x181c2a)` + `clear()` をレンダラー生成直後に実行 |
+| ページ遷移後も白発光する | JS 停止後にブラウザがバッファを破棄する | `preserveDrawingBuffer: true` + `pagehide` で暗色クリアを確定描画 |
+| Sobel が透明ピクセルで誤反応 | アルファ=0 のピクセルを輝度 0 として計算してしまう | `alpha < 30` のピクセルを `-1` 扱いにして近傍に含む場合はスキップ |
+| タイル・星の X/Y 座標変換を共通化したら歪んだ | アスペクト比が 1:1 でないのに同一スケールを使っていた | `toWorldX` / `toWorldY` を X・Y で完全に独立させる |
+| GATHERING → FORMED でトレイル残像が矩形に見える | 前フレームのトレイル積算が残る | フェーズ切り替え 1 フレーム目に rtA/rtB を両方クリア |
+| DISPERSING 開始直後に矩形パーティクルが瞬間出現 | 円マスクが即座に外れる | DISPERSING 序盤は FORMED と同じ円マスクを継続し progress に応じて徐々に解除 |
+| アイコン切り替え後もパーティクルが前のアイコン形状を保持 | `iconTargets.length > 0` の guard で上書きをスキップしていた | guard を外して `i === 0` のロード完了時に必ず `iconTargets` を上書き |

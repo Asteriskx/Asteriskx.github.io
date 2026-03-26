@@ -154,7 +154,11 @@ const RECENT_POSTS = Object.entries(postModules)
     slug: path.replace("../content/blog/", "").replace(".mdx", ""),
     ...mod.frontmatter,
   }))
-  .sort((a, b) => b.date.localeCompare(a.date))
+  .sort((a, b) => {
+    const byDate = b.date.localeCompare(a.date);
+    if (byDate !== 0) return byDate;
+    return b.slug.localeCompare(a.slug);
+  })
   .slice(0, 3);
 
 // ─── Page ─────────────────────────────────────────────────────────────────────

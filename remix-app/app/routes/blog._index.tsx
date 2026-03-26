@@ -19,7 +19,12 @@ const posts = Object.entries(postModules)
     slug: filepath.replace("../content/blog/", "").replace(".mdx", ""),
     ...mod.frontmatter,
   }))
-  .sort((a, b) => b.date.localeCompare(a.date));
+  .sort((a, b) => {
+    const byDate = b.date.localeCompare(a.date);
+    if (byDate !== 0) return byDate;
+    // 同日は slug（ファイル名）の降順（後から作ったファイルが上）
+    return b.slug.localeCompare(a.slug);
+  });
 
 export const meta: MetaFunction = () => [{ title: "Blog — Asteriskx" }];
 
