@@ -1,0 +1,381 @@
+---
+title: "React Router v7 で SSG して GitHub Pages にデプロイする"
+date: "2026-03-26"
+description: "ssr: false + prerender で完全静的化し、GitHub Actions で gh-pages ブランチに自動デプロイするまでの手順書。カスタムドメイン・OGP 静的注入・動的ルートの列挙も含む。"
+---
+
+import { BlogToc } from "../../components/BlogToc";
+
+# React Router v7 で SSG して GitHub Pages にデプロイする
+
+このサイト（asteriskx.net）の構築時に整理した手順をそのまま残しておく。
+
+未来の自分が同じ構成を作るときのリファレンスとして。
+
+<BlogToc items={[
+  { label: "最終的な構成",                                       href: "#s0"     },
+  { label: "プロジェクト作成",                                   href: "#s1"     },
+  { label: "SSG に切り替える（react-router.config.ts）",        href: "#s2"     },
+  { label: "動的ルートを列挙する（ブログ記事など）",             href: "#s3"     },
+  { label: "静的 HTML に CSS / OGP を直接注入する（vite.config.ts）", href: "#s4" },
+  { label: "MDX を使う場合（ブログ記事）",                      href: "#s5"     },
+  { label: "GitHub Actions でデプロイする",                      href: "#s6"     },
+  { label: "GitHub Pages のブランチ設定（初回のみ）",            href: "#s7"     },
+  { label: "カスタムドメインの DNS 設定",                        href: "#s8"     },
+  { label: "CNAME ファイルの対応",                               href: "#s9"     },
+  { label: "ハマりポイントまとめ",                               href: "#s-tips" },
+]} />
+
+---
+
+<h2 id="s0">最終的な構成</h2>
+
+```
+remix-app/
+  app/
+    routes/          # ページルート
+    content/blog/    # MDX ブログ記事
+  react-router.config.ts  # SSG 設定
+  vite.config.ts          # ビルドプラグイン
+  public/
+    CNAME            # カスタムドメイン設定
+.github/
+  workflows/
+    deploy.yml       # GitHub Actions
+```
+
+- **フレームワーク**：React Router v7（`@react-router/dev` ベース）
+- **ビルド成果物**：`remix-app/build/client/` に全ページの静的 HTML + アセット
+- **デプロイ先**：`gh-pages` ブランチ → GitHub Pages
+
+---
+
+<h2 id="s1">1. プロジェクト作成</h2>
+
+```bash
+npx create-react-router@latest remix-app
+cd remix-app
+npm install
+```
+
+`create-react-router` で雛形が生成される。デフォルトは SSR（Node サーバー前提）なので、次の手順で SSG に切り替える。
+
+---
+
+<h2 id="s2">2. SSG に切り替える（react-router.config.ts）</h2>
+
+`react-router.config.ts` を以下のように設定する。
+
+```ts
+import type { Config } from "@react-router/dev/config";
+
+export default {
+  ssr: false,          // SSR を無効化（クライアントサイドのみ）
+  async prerender() {
+    return ["/"];      // 静的生成するパスを列挙
+  },
+} satisfies Config;
+```
+
+`ssr: false` にすると `react-router build` が完全静的ファイルを吐くようになる。
+
+`prerender()` に列挙したパスそれぞれの HTML が生成される。
+
+---
+
+<h2 id="s3">3. 動的ルートを列挙する（ブログ記事など）</h2>
+
+`/blog/:slug` のような動的ルートは、ビルド時にスラッグを全て列挙して渡す必要がある。
+
+`glob` で MDX ファイルを走査してスラッグを取り出す。
+
+```bash
+npm install --save-dev glob
+```
+
+```ts
+import type { Config } from "@react-router/dev/config";
+import { glob } from "glob";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+async function getBlogSlugs(): Promise<string[]> {
+  const files = await glob("app/content/blog/*.mdx", { cwd: __dirname });
+  return files.map((f) => path.basename(f, ".mdx"));
+}
+
+export default {
+  ssr: false,
+  async prerender() {
+    const slugs = await getBlogSlugs();
+    return [
+      "/",
+      "/blog",
+      ...slugs.map((s) => `/blog/${s}`),
+    ];
+  },
+} satisfies Config;
+```
+
+記事ファイルを追加するたびに自動で列挙されるので、手動管理が不要。
+
+---
+
+<h2 id="s4">4. 静的 HTML に CSS / OGP を直接注入する（vite.config.ts）</h2>
+
+React Router の `meta()` 関数は **クライアント側で実行される**。
+
+SSG でビルドされた静的 HTML ファイルの中には meta タグが含まれないため、クローラーには OGP が届かない。
+
+また、Three.js などの重い描画が走る前に背景色が白く光るいわゆる「白発光」も問題になる。
+
+どちらも Vite の `transformIndexHtml` フックで静的 HTML を直接書き換えることで解決できる。
+
+```ts
+import { reactRouter } from "@react-router/dev/vite";
+import { defineConfig, type Plugin } from "vite";
+
+function injectCriticalBg(): Plugin {
+  const SITE_URL  = "https://example.com";
+  const OGP_IMAGE = `${SITE_URL}/assets/image/ogp.png`;
+
+  const ogpTags = [
+    `<meta property="og:type"        content="website">`,
+    `<meta property="og:url"         content="${SITE_URL}">`,
+    `<meta property="og:title"       content="サイトタイトル">`,
+    `<meta property="og:description" content="サイト説明">`,
+    `<meta property="og:image"       content="${OGP_IMAGE}">`,
+    `<meta name="twitter:card"       content="summary_large_image">`,
+    `<meta name="twitter:site"       content="@yourhandle">`,
+    `<meta name="twitter:image"      content="${OGP_IMAGE}">`,
+  ].join("");
+
+  return {
+    name: "inject-critical-bg",
+    transformIndexHtml(html) {
+      // color-scheme: dark でスクロールバー等のシステム UI も暗色に統一できる
+      const criticalCss = `<style>html,body{background:#181c2a;color-scheme:dark}</style>`;
+      return html.replace("<head>", `<head>${criticalCss}${ogpTags}`);
+    },
+  };
+}
+
+export default defineConfig({
+  plugins: [
+    injectCriticalBg(),
+    reactRouter(),
+  ],
+});
+```
+
+ポイントは **`reactRouter()` より前にプラグインを置くこと**。
+
+後ろに置くと HTML の変換タイミングがずれる場合がある。
+
+---
+
+<h2 id="s5">5. MDX を使う場合（ブログ記事）</h2>
+
+MDX でブログ記事を書く場合は以下のパッケージを追加する。
+
+```bash
+npm install --save-dev @mdx-js/rollup @types/mdx remark-frontmatter remark-mdx-frontmatter remark-gfm rehype-highlight
+```
+
+| パッケージ | 役割 |
+|-----------|------|
+| `@mdx-js/rollup` | Vite で MDX をバンドルする |
+| `@types/mdx` | MDX ファイルを TypeScript から import したときの型エラーを解消する |
+| `remark-frontmatter` | `---` で囲まれた frontmatter を解析する |
+| `remark-mdx-frontmatter` | frontmatter を MDX の export として使えるようにする |
+| `remark-gfm` | テーブル・チェックボックスなど GitHub Flavored Markdown を有効にする |
+| `rehype-highlight` | コードブロックにシンタックスハイライトを適用する |
+
+`vite.config.ts` に `mdx()` プラグインを追加する。**`reactRouter()` より前に置くこと**。
+
+```ts
+import { reactRouter } from "@react-router/dev/vite";
+import mdx from "@mdx-js/rollup";
+import remarkFrontmatter from "remark-frontmatter";
+import remarkMdxFrontmatter from "remark-mdx-frontmatter";
+import remarkGfm from "remark-gfm";
+import rehypeHighlight from "rehype-highlight";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  plugins: [
+    mdx({
+      remarkPlugins: [remarkFrontmatter, remarkMdxFrontmatter, remarkGfm],
+      rehypePlugins: [rehypeHighlight],
+    }),
+    reactRouter(),
+  ],
+});
+```
+
+frontmatter の型定義を用意しておくと各ルートで使いやすい。
+
+```ts
+// app/types.ts
+export interface PostFrontmatter {
+  title: string;
+  date: string;
+  description: string;
+}
+```
+
+記事ファイルは `app/content/blog/yyyymmdd-タイトル.mdx` の形式で作成する。
+
+```mdx
+---
+title: "記事タイトル"
+date: "2026-01-01"
+description: "記事の説明"
+---
+
+# 記事タイトル
+
+本文...
+```
+
+`rehype-highlight` はコードブロックにクラスを付与するだけなので、別途テーマの CSS を import する必要がある。
+
+```ts
+// root.tsx などエントリーポイントで import する
+import "highlight.js/styles/github-dark.css";
+```
+
+テーマは highlight.js のデモページ（https://highlightjs.org/demo）で確認できる。
+
+---
+
+<h2 id="s6">6. GitHub Actions でデプロイする</h2>
+
+`.github/workflows/deploy.yml` を作成する。
+
+```yaml
+name: Build and Deploy
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: remix-app   # remix-app/ 配下でコマンドを実行
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: remix-app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Copy CNAME
+        run: cp public/CNAME build/client/CNAME   # カスタムドメインを維持する（後述）
+
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: remix-app/build/client      # ビルド成果物のディレクトリ
+          force_orphan: true                        # gh-pages ブランチを常にリセット
+```
+
+`force_orphan: true` にしておくと `gh-pages` ブランチに余計なコミット履歴が積まれない。
+
+デプロイのたびに差分なしで完全上書きされるので管理が楽。
+
+---
+
+<h2 id="s7">7. GitHub Pages のブランチ設定（初回のみ）</h2>
+
+Actions でデプロイしても、GitHub Pages 側でブランチを指定しないと公開されない。初回だけ以下の設定が必要。
+
+1. リポジトリの **Settings** → **Pages** を開く
+2. **Source** を `Deploy from a branch` に設定
+3. **Branch** を `gh-pages` / `(root)` に設定して Save
+
+以降は master へのプッシュで自動デプロイされる。
+
+---
+
+<h2 id="s8">8. カスタムドメインの DNS 設定</h2>
+
+カスタムドメインを使う場合、ドメインレジストラ側で DNS レコードを設定する必要がある。
+
+**サブドメイン（www など）の場合：CNAME レコード**
+
+```
+www.example.com  →  username.github.io
+```
+
+**apex ドメイン（example.com そのもの）の場合：A レコード × 4件**
+
+```
+example.com  →  185.199.108.153
+example.com  →  185.199.109.153
+example.com  →  185.199.110.153
+example.com  →  185.199.111.153
+```
+
+DNS の反映には数分〜数時間かかる場合がある。
+
+設定後、GitHub リポジトリの **Settings → Pages → Custom domain** にドメインを入力して Save する。
+
+**Enforce HTTPS** のチェックボックスも有効にしておくこと（証明書の発行に数分かかる場合がある）。
+
+---
+
+<h2 id="s9">9. CNAME ファイルの対応</h2>
+
+GitHub Pages でカスタムドメインを使う場合、`gh-pages` ブランチのルートに `CNAME` ファイルが必要。
+
+```
+remix-app/public/CNAME
+```
+
+```
+example.com
+```
+
+ただし `force_orphan: true` でデプロイするたびブランチがリセットされるので、ビルド後に明示的にコピーしないと CNAME が消えてカスタムドメインが外れてしまう。
+
+```yaml
+- name: Copy CNAME
+  run: cp public/CNAME build/client/CNAME
+```
+
+このステップを忘れると、プッシュのたびにドメインが `*.github.io` に戻る。
+
+---
+
+<h2 id="s-tips">ハマりポイントまとめ</h2>
+
+| 問題 | 原因 | 解決策 |
+|------|------|--------|
+| OGP タグがクローラーに読まれない | `meta()` はクライアント実行で静的 HTML には含まれない | `transformIndexHtml` で直接注入 |
+| 白発光（背景が一瞬白くなる） | JS 読み込み前の背景色が未設定 | critical CSS を `transformIndexHtml` で注入 |
+| Actions でデプロイしても公開されない | GitHub Pages 側のブランチ設定が未完了 | Settings → Pages で `gh-pages` を指定 |
+| カスタムドメインが繋がらない | DNS レコード未設定、または反映待ち | A レコード × 4 または CNAME レコードを設定して待つ |
+| カスタムドメインがデプロイのたびに外れる | `force_orphan` で CNAME が消える | ビルド後に `cp public/CNAME build/client/CNAME` |
+| 動的ルートの HTML が生成されない | `prerender()` に列挙されていない | `glob` でスラッグを列挙して渡す |
+| MDX テーブルが崩れる | `remark-gfm` が未設定 | `vite.config.ts` の `remarkPlugins` に追加 |
+| コードブロックに色がつかない | `rehype-highlight` の CSS が未 import | `root.tsx` で `highlight.js/styles/xxx.css` を import |
+| MDX を import すると型エラー | `@types/mdx` が未インストール | `npm install --save-dev @types/mdx` |
