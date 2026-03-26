@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 
-const CHARS = "アイウエオカキクケコ01アスタリスクXYZ<>/{}[]";
+const CHARS = "WelcometoasteriskxnetWELCOMETOASTERISKXNET0123456789.*@#_/<>~[]{}!";
 
 /** {@link MatrixRainCard} に渡す Props */
 interface Props {

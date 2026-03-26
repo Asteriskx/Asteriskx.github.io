@@ -773,12 +773,15 @@ em {
 }
 
 .sec-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
   font-size: 2rem;
   font-weight: 700;
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--text);
-  white-space: nowrap; /* // と見出しテキストが折り返されないよう固定 */
+  white-space: nowrap;
   /* reveal と連動して少し遅れてフェードイン */
   transform: translateX(-8px);
   transition: transform 0.7s var(--ease-expo) 0.15s, opacity 0.5s ease 0.15s;
@@ -786,14 +789,13 @@ em {
 }
 
 .sec-label::before {
-  content: '// ';
+  content: '//';
   font-family: var(--font-mono);
   font-size: 0.55em;
   font-weight: 400;
   letter-spacing: 0;
   color: var(--accent);
   opacity: 0.45;
-  vertical-align: middle;
 }
 .section-head.visible .sec-label {
   transform: translateX(0);
