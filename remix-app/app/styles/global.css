@@ -1761,7 +1761,7 @@ em {
   letter-spacing: -0.015em;
 }
 
-.blog-content h2 { font-size: 1.35rem; border-bottom: 1px solid rgba(0,229,255,0.1); padding-bottom: 0.4rem; }
+.blog-content h2 { font-size: 1.35rem; border-bottom: 1px solid rgba(0,229,255,0.1); padding-bottom: 0.4rem; scroll-margin-top: 5rem; }
 .blog-content h3 { font-size: 1.1rem; }
 .blog-content h4 { font-size: 0.95rem; color: var(--accent); }
 
