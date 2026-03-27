@@ -51,9 +51,16 @@ export default function App() {
     if (!sessionStorage.getItem("lo_done") || isReload) setShowLogin(true);
   }, [pathname]);
 
-  // ログインアニメーション中はスクロールをロック
+  // ログインアニメーション中はスクロールをロック。
+  // リロード時にブラウザがスクロール位置を復元すると section-head が viewport 外に出て
+  // IntersectionObserver が発火しなくなる問題があるため、表示時にトップへ強制スクロールする。
   useEffect(() => {
-    document.body.style.overflow = showLogin ? "hidden" : "";
+    if (showLogin) {
+      document.body.style.overflow = "hidden";
+      window.scrollTo(0, 0);
+    } else {
+      document.body.style.overflow = "";
+    }
     return () => { document.body.style.overflow = ""; };
   }, [showLogin]);
 

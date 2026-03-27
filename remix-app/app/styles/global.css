@@ -389,7 +389,7 @@ em {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 9rem 3rem 5rem;
+  padding: 9rem max(3rem, calc((100% - 2000px) / 2)) 5rem;
   position: relative;
   overflow: hidden;
 }
@@ -724,7 +724,8 @@ em {
    Sections (共通)
    =========================== */
 .section {
-  padding: 8rem 3rem;
+  /* max() で 2000px 超えた時点から padding を増やして中央寄せ。1920px 以下は 3rem 固定で現状維持 */
+  padding: 8rem max(3rem, calc((100% - 2000px) / 2));
   border-top: 1px solid var(--border);
 }
 
@@ -1853,6 +1854,10 @@ em {
   border-collapse: collapse;
   margin: 1.5rem 0;
   font-size: 0.9rem;
+  /* モバイルでテーブルが viewport を超えた場合に横スクロール可能にする */
+  display: block;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .blog-content th,
@@ -2128,6 +2133,12 @@ em {
 @media (max-width: 480px) {
   .section {
     padding: 3.5rem 1.2rem;
+  }
+
+  /* .hero.section は .section に上書きされて padding-top が 3.5rem になるため
+     固定ヘッダー（約 60px）に被らないよう上 padding を個別に確保する */
+  .hero {
+    padding: 6rem 1.2rem 3rem;
   }
 
   /* ── Hero terminal ── */
