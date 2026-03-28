@@ -1,0 +1,405 @@
+---
+title: "UDS / DTC 解説メモ — 車載診断の仕組み"
+date: "2026-03-28"
+description: "車載 ECU 開発の実務知見をもとに UDS / DTC を整理。通信モデル・主要サービス・DTC 構造・ステータスバイト・FreezeFrame・診断フローまで。"
+---
+
+import { BlogToc } from "../../components/BlogToc";
+
+# UDS / DTC 解説メモ — 車載診断の仕組み
+
+> これまでの車載 ECU 開発を通じて得た知見を整理した備忘録。
+> CAN / CAN FD の仕組みについては[こちらの記事](/blog/20260328-can-canfd-protocol)を参照。
+
+<BlogToc items={[
+  { label: "UDS とは",                          href: "#s1" },
+  { label: "UDS の通信モデル",                  href: "#s2" },
+  { label: "主要 UDS サービス一覧",             href: "#s3" },
+  { label: "DTC とは",                          href: "#s4" },
+  { label: "DTC ステータスバイト",              href: "#s5" },
+  { label: "DTC の検出と記録フロー",            href: "#s6" },
+  { label: "FreezeFrame / Snapshot",            href: "#s7" },
+  { label: "UDS 0x19 サブファンクション",       href: "#s8" },
+  { label: "実務での診断フロー",                href: "#s9" },
+]} />
+
+---
+
+<h2 id="s1">01. UDS とは</h2>
+
+UDS（Unified Diagnostic Services）は、ISO 14229 で定義された車載 ECU の**診断通信プロトコル**。
+OEM・サプライヤー間で統一された診断インターフェースを提供し、ECU のソフト書き込み・DTC 読み出し・内部データの参照などを標準的な手順で行える。
+
+### プロトコルスタック上の位置
+
+```
+┌──────────────────────────────────┐
+│  UDS（ISO 14229-1）              │  ← アプリケーション層
+│  診断サービス定義（SID）          │
+├──────────────────────────────────┤
+│  ISO-TP（ISO 15765-2）           │  ← トランスポート層
+│  マルチフレーム分割・再構築       │
+├──────────────────────────────────┤
+│  CAN / CAN FD（ISO 11898）       │  ← データリンク + 物理層
+│  フレーム送受信                  │
+└──────────────────────────────────┘
+```
+
+UDS のメッセージは最大数千バイトになりうるが、CAN のペイロードは 8 バイト（FD でも 64 バイト）。
+この差を埋めるのが **ISO-TP**（Transport Protocol）で、長いメッセージを複数の CAN フレームに分割して送受信する。
+
+### ISO-TP のフレーム種別
+
+| フレーム | 略称 | 役割 |
+|----------|------|------|
+| Single Frame | SF | 7 バイト以下のメッセージを 1 フレームで送信 |
+| First Frame | FF | 分割送信の最初のフレーム。全体長を通知 |
+| Consecutive Frame | CF | 2 フレーム目以降の連続データ |
+| Flow Control | FC | 受信側が送信ペースを制御（BS / STmin） |
+
+---
+
+<h2 id="s2">02. UDS の通信モデル</h2>
+
+UDS は**クライアント / サーバーモデル**で動作する。
+診断ツール（テスター）がクライアント、ECU がサーバー。
+
+### リクエスト / レスポンス
+
+```
+テスター                         ECU
+   │                              │
+   │── Request（SID + データ）──→ │
+   │                              │  処理
+   │←─ Positive Response ────────│  （SID + 0x40 + データ）
+   │   or                        │
+   │←─ Negative Response ────────│  （0x7F + SID + NRC）
+```
+
+- **Positive Response**: SID に 0x40 を加えた値が先頭に来る（例: 0x22 → 0x62）
+- **Negative Response**: 固定で `0x7F` + 元の SID + NRC（エラーコード）
+
+### 主な NRC（Negative Response Code）
+
+| NRC | 値 | 意味 |
+|-----|------|------|
+| generalReject | 0x10 | 汎用拒否 |
+| serviceNotSupported | 0x11 | そのサービスは未対応 |
+| subFunctionNotSupported | 0x12 | サブファンクションが未対応 |
+| incorrectMessageLengthOrInvalidFormat | 0x13 | メッセージ長不正 |
+| conditionsNotCorrect | 0x22 | 実行条件を満たしていない |
+| requestSequenceError | 0x24 | サービスの呼び出し順序が不正 |
+| requestOutOfRange | 0x31 | パラメータが範囲外 |
+| securityAccessDenied | 0x33 | セキュリティ未解除 |
+| invalidKey | 0x35 | セキュリティキーが不正 |
+| exceededNumberOfAttempts | 0x36 | 試行回数上限超過 |
+| uploadDownloadNotAccepted | 0x70 | アップロード / ダウンロード拒否 |
+| responsePending | 0x78 | 処理中。もう少し待って（テスターはタイムアウトを延長） |
+
+`0x78 responsePending` は実務でよく遭遇する。
+ECU がフラッシュ消去中など時間のかかる処理をしているとき、タイムアウトを防ぐために ECU 側から繰り返し送信される。
+
+---
+
+<h2 id="s3">03. 主要 UDS サービス一覧</h2>
+
+### 診断セッション / セキュリティ
+
+| SID | サービス名 | 説明 |
+|-----|-----------|------|
+| 0x10 | **DiagnosticSessionControl** | 診断セッションの切り替え（Default / Extended / Programming） |
+| 0x11 | **ECUReset** | ECU リセット（Hard / Soft / KeyOffOnReset） |
+| 0x27 | **SecurityAccess** | Seed & Key 方式でセキュリティ解除 |
+| 0x28 | **CommunicationControl** | 通常通信の有効 / 無効切り替え |
+| 0x3E | **TesterPresent** | テスター接続維持（セッションタイムアウト防止） |
+| 0x85 | **ControlDTCSetting** | DTC 検出の一時停止 / 再開 |
+
+### データ読み書き
+
+| SID | サービス名 | 説明 |
+|-----|-----------|------|
+| 0x22 | **ReadDataByIdentifier** | DID（Data Identifier）を指定してデータ読み出し |
+| 0x2E | **WriteDataByIdentifier** | DID を指定してデータ書き込み |
+| 0x23 | **ReadMemoryByAddress** | メモリアドレスを直接指定して読み出し |
+| 0x2F | **InputOutputControlByIdentifier** | アクチュエータの強制駆動テスト |
+
+### フラッシュ書き込み（リプロ）
+
+| SID | サービス名 | 説明 |
+|-----|-----------|------|
+| 0x34 | **RequestDownload** | ダウンロード開始要求（アドレス・サイズ指定） |
+| 0x36 | **TransferData** | データ転送（ブロック単位） |
+| 0x37 | **RequestTransferExit** | 転送完了通知 |
+| 0x31 | **RoutineControl** | ルーチン実行（消去・検証・チェックサム計算など） |
+
+### DTC 関連
+
+| SID | サービス名 | 説明 |
+|-----|-----------|------|
+| 0x19 | **ReadDTCInformation** | DTC の読み出し（詳細は s8 参照） |
+| 0x14 | **ClearDiagnosticInformation** | DTC の消去 |
+
+### 典型的なフラッシュ書き込みシーケンス
+
+```
+0x10 02          → Programming Session 開始
+0x27 01 / 02     → SecurityAccess（Seed 取得 → Key 送信）
+0x85 02          → DTC 検出停止
+0x28 03 01       → 通常通信停止
+0x31 01 FF00     → RoutineControl: フラッシュ消去
+0x34 ...         → RequestDownload
+0x36 01 [data]   → TransferData（ブロック 1）
+0x36 02 [data]   → TransferData（ブロック 2）
+  ...
+0x37             → RequestTransferExit
+0x31 01 FF01     → RoutineControl: チェックサム検証
+0x11 01          → ECUReset（Hard Reset）
+```
+
+---
+
+<h2 id="s4">04. DTC とは</h2>
+
+DTC（Diagnostic Trouble Code）は、ECU が検出した**異常を識別するためのコード**。
+「どのセンサーが」「どんな異常を」起こしたかを一意に特定できるように体系化されている。
+
+### DTC の構造（3 バイト = 24 ビット）
+
+UDS で扱う DTC は 3 バイト構成。
+
+```
+バイト 1         バイト 2         バイト 3
+[上位 2bit][6bit] [8bit]          [8bit]
+  カテゴリ   固有ID              Failure Type
+```
+
+| バイト | 内容 | 例 |
+|--------|------|-----|
+| バイト 1-2 | DTC 番号（故障箇所） | 0x0301 = シリンダー 1 ミスファイア系 |
+| バイト 3 | Failure Type（故障種別） | 0x11 = 回路の地絡（Short to Ground） |
+
+### OBD-II 表記との対応
+
+OBD-II では DTC を **5 文字のコード**（例: `P0301`）で表現する。
+
+```
+P  0  3  0  1
+│  │  │  └──┘ 固有番号
+│  │  └────── サブシステム（3 = 点火系）
+│  └───────── 0 = SAE 標準 / 1 = メーカー固有
+└──────────── カテゴリ
+```
+
+| プレフィックス | カテゴリ |
+|---------------|---------|
+| **P** | Powertrain（パワートレイン） |
+| **B** | Body（ボディ） |
+| **C** | Chassis（シャシー） |
+| **U** | Network / Communication（通信系） |
+
+UDS の 3 バイト DTC と OBD-II の 5 文字コードは相互変換可能。
+上位 2 ビットがカテゴリ（P/B/C/U）に対応している。
+
+---
+
+<h2 id="s5">05. DTC ステータスバイト</h2>
+
+各 DTC には **1 バイトのステータス情報** が付随する。
+8 ビットそれぞれに意味があり、DTC の現在の状態を表す。
+
+| Bit | 名称 | 意味 |
+|-----|------|------|
+| 0 | **testFailed** | 現在テスト失敗中（異常が出ている） |
+| 1 | **testFailedThisOperationCycle** | 今回の運転サイクルでテスト失敗あり |
+| 2 | **pendingDTC** | 保留中（確定前だが異常が検出された） |
+| 3 | **confirmedDTC** | 確定済み（条件を満たして DTC が確定） |
+| 4 | **testNotCompletedSinceLastClear** | 前回 DTC 消去後、テストが未完了 |
+| 5 | **testFailedSinceLastClear** | 前回 DTC 消去後にテスト失敗あり |
+| 6 | **testNotCompletedThisOperationCycle** | 今回の運転サイクルでテスト未完了 |
+| 7 | **warningIndicatorRequested** | MIL（警告灯）点灯要求あり |
+
+### よく使う組み合わせ
+
+```
+ステータスバイト = 0x09 (bit0=1, bit3=1)
+→ testFailed + confirmedDTC = 「現在異常が出ていて、確定済み」
+
+ステータスバイト = 0x08 (bit3=1)
+→ confirmedDTC のみ = 「過去に確定したが、現在は異常なし（間欠故障）」
+
+ステータスバイト = 0x04 (bit2=1)
+→ pendingDTC のみ = 「異常を検出したが、まだ確定していない」
+```
+
+---
+
+<h2 id="s6">06. DTC の検出と記録フロー</h2>
+
+DTC は検出されたら即座に確定するわけではない。
+誤検出を防ぐため、**デバウンスカウンタ**と**運転サイクル**を使った段階的な確定プロセスがある。
+
+### 状態遷移
+
+```
+異常検出
+  │
+  ▼
+[デバウンス]  ← カウンタが閾値に達するまで繰り返し判定
+  │ 閾値到達
+  ▼
+[Pending]    ← pendingDTC = 1。1 運転サイクル目の異常
+  │ 次の運転サイクルでも再発
+  ▼
+[Confirmed]  ← confirmedDTC = 1。MIL 点灯条件を満たす場合あり
+  │
+  ├─ 異常が消えた場合 → testFailed = 0（confirmedDTC は残る）
+  │
+  ├─ 複数サイクル正常 → Aging（自動消去対象になる）
+  │
+  └─ テスターで消去 → 0x14 ClearDiagnosticInformation
+```
+
+### デバウンス方式
+
+| 方式 | 説明 |
+|------|------|
+| **カウンタベース** | テスト失敗でカウンタ加算、成功で減算。閾値到達で Pending |
+| **タイムベース** | 異常が一定時間（例: 500ms）継続したら Pending |
+
+どちらを使うかは ECU / DTC ごとに設計で決まる。
+AUTOSAR の Dem（Diagnostic Event Manager）モジュールがこのデバウンスロジックを管理している。
+
+### Aging（自然消去）
+
+Confirmed DTC は、異常が出なくなった後も一定回数の運転サイクルが正常に完了するまで保持される。
+一般的には **40 運転サイクル** で Aging 完了（OBD-II 要件）。
+Aging が完了すると confirmedDTC ビットが自動的にクリアされる。
+
+---
+
+<h2 id="s7">07. FreezeFrame / Snapshot</h2>
+
+DTC が記録される際、**その瞬間の ECU 内部データ**を一緒に保存する仕組みが FreezeFrame（Snapshot）。
+「いつ・どんな状況で異常が起きたか」を後から解析するための重要な情報。
+
+### 記録される典型的なデータ
+
+| DID | パラメータ | 例 |
+|-----|-----------|-----|
+| 0xF186 | 診断セッション | Default Session |
+| エンジン回転数 | rpm | 2400 rpm |
+| 車速 | km/h | 60 km/h |
+| エンジン冷却水温 | ℃ | 92 ℃ |
+| 吸気温度 | ℃ | 35 ℃ |
+| バッテリー電圧 | V | 13.8 V |
+| 走行距離 | km | 45,230 km |
+
+記録タイミングは DTC が **Pending → Confirmed に遷移した瞬間**が一般的。
+ただし ECU の設計によっては Pending 時点で FreezeFrame を取る場合もある。
+
+### Extended Data Record
+
+FreezeFrame に加えて、DTC ごとに **Extended Data**（拡張データ）を持てる。
+
+| データ | 説明 |
+|--------|------|
+| Occurrence Counter | DTC 発生回数 |
+| Aging Counter | Aging サイクルカウンタ |
+| 最終発生タイムスタンプ | 最後に testFailed になった時刻 |
+
+---
+
+<h2 id="s8">08. UDS 0x19 サブファンクション</h2>
+
+SID 0x19（ReadDTCInformation）は**サブファンクション**で読み出し方法を指定する。
+実務で頻繁に使うものを中心に整理。
+
+| SF | 名称 | 用途 |
+|----|------|------|
+| 0x01 | **reportNumberOfDTCByStatusMask** | ステータスマスクに合致する DTC の件数を取得 |
+| 0x02 | **reportDTCByStatusMask** | ステータスマスクに合致する DTC の一覧を取得 |
+| 0x04 | **reportDTCSnapshotRecordByDTCNumber** | 特定 DTC の FreezeFrame を取得 |
+| 0x06 | **reportDTCExtDataRecordByDTCNumber** | 特定 DTC の Extended Data を取得 |
+| 0x09 | **reportDTCBySeverityMaskRecord** | 重要度マスクで DTC をフィルタ |
+| 0x0A | **reportSupportedDTC** | ECU がサポートする全 DTC を取得 |
+| 0x14 | **reportDTCFaultDetectionCounter** | デバウンスカウンタの現在値を取得 |
+
+### 使用例: Confirmed DTC を全件取得
+
+```
+Request:  19 02 08
+              │  │  └─ StatusMask = 0x08（confirmedDTC のみ）
+              │  └──── SF = 0x02（reportDTCByStatusMask）
+              └─────── SID = 0x19
+
+Response: 59 02 08 [DTC1 高][DTC1 中][DTC1 低][Status1] [DTC2 ...] ...
+```
+
+### 使用例: 特定 DTC の FreezeFrame を取得
+
+```
+Request:  19 04 03 01 11 FF
+              │  │  └──────┘ └─ RecordNumber = 0xFF（全レコード）
+              │  │  DTC = 0x030111
+              │  └─ SF = 0x04
+              └──── SID = 0x19
+
+Response: 59 04 03 01 11 [Status] [RecordNum] [DID1][Data1] [DID2][Data2] ...
+```
+
+---
+
+<h2 id="s9">09. 実務での診断フロー</h2>
+
+### 開発フェーズ別の使い分け
+
+| フェーズ | 主に使うサービス | 目的 |
+|----------|-----------------|------|
+| **開発中** | 0x22 / 0x2E / 0x2F | DID 読み書き・アクチュエータ強制駆動でロジック検証 |
+| **結合テスト** | 0x19 / 0x14 / 0x85 | DTC の発生確認・消去・検出停止 |
+| **リプロ（書き込み）** | 0x10 / 0x27 / 0x34 / 0x36 / 0x37 | ソフト書き換え |
+| **量産ライン** | 0x2E / 0x31 | 個体情報書き込み・EOL（End Of Line）検査 |
+| **市場（ディーラー）** | 0x19 / 0x14 / 0x22 | 故障診断・DTC 確認・消去 |
+
+### ディーラーでの典型的な診断手順
+
+```
+1. 診断ツール接続
+   └→ 0x10 01（Default Session）
+
+2. 全 ECU に DTC 一括問い合わせ
+   └→ 0x19 02 09（testFailed + confirmedDTC）
+
+3. 該当 DTC の FreezeFrame 確認
+   └→ 0x19 04 [DTC] FF
+   └→ 発生時の車速・回転数・水温などから状況を推測
+
+4. 修理実施
+
+5. DTC 消去
+   └→ 0x14 FF FF FF（全 DTC 消去）
+
+6. テスト走行後、再度 DTC 確認
+   └→ 0x19 02 09
+   └→ 再発なしを確認して完了
+```
+
+### 開発時のデバッグ Tips
+
+- **0x2F InputOutputControl** でアクチュエータを強制駆動すると、ハーネス断線の切り分けが楽になる。
+ECU から「モーターを回せ」と指令して動かなければハーネスか負荷側、動けば制御ロジック側の問題
+- **0x85 02 ControlDTCSetting OFF** をリプロ前に忘れると、書き込み中に大量の通信系 DTC が記録されてしまう。
+リプロシーケンスでは必ず DTC 検出を止めてから書き込む
+- **0x19 14 reportDTCFaultDetectionCounter** でデバウンスカウンタを見ると、「あと何回で DTC 確定するか」がわかる。
+間欠故障の再現テストで重宝する
+
+---
+
+> **まとめ**
+>
+> - UDS は ISO 14229 で定義された車載診断の統一プロトコル。ISO-TP で CAN 上に載る
+> - リクエスト / レスポンスモデルで、Positive（SID + 0x40）/ Negative（0x7F + NRC）で応答
+> - DTC は 3 バイト構成で、1 バイトのステータスバイトが現在の状態を表す
+> - 検出 → Pending → Confirmed → Aging / 消去の段階的なライフサイクルがある
+> - FreezeFrame で異常発生時の環境データを記録し、後から原因解析に活用できる
+> - 0x19 のサブファンクションを使い分けることで、必要な DTC 情報を効率よく取得できる
