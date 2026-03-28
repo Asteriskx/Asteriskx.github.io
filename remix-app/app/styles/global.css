@@ -2116,6 +2116,19 @@ em {
     font-size: 0.78rem;
   }
 
+  /* テーブルのセルを折り返し可能にして切れ目をなくす */
+  .blog-content th,
+  .blog-content td {
+    white-space: normal;
+    word-break: break-word;
+    padding: 0.5rem 0.7rem;
+  }
+
+  /* th フォントを本文に近いサイズに合わせる */
+  .blog-content th {
+    font-size: 0.85rem;
+  }
+
   /* ── Contact ── */
   /* 4 items: icon | name | handle | arrow */
   .contact-link {
