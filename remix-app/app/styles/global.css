@@ -2489,3 +2489,81 @@ em {
     line-height: 1.6;
   }
 }
+
+/* ===========================
+   404 Not Found
+   =========================== */
+.notfound-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.notfound-terminal {
+  background: rgba(6, 10, 20, 0.65);
+  border: 1px solid rgba(0, 229, 255, 0.18);
+  border-radius: 10px;
+  padding: 20px 28px 22px;
+  max-width: 520px;
+  width: 94vw;
+  box-shadow:
+    0 0 0 1px rgba(0, 229, 255, 0.06),
+    0 12px 48px rgba(0, 0, 0, 0.5),
+    0 0 80px rgba(0, 229, 255, 0.05);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.nf-titlebar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.nf-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+}
+.nf-dot-r { background: #ff5f57; }
+.nf-dot-y { background: #febc2e; }
+.nf-dot-g { background: #28c840; }
+
+.nf-line {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.nf-prompt    { color: var(--accent); }
+.nf-cmd       { color: var(--text); }
+.nf-err       { color: #ff6b6b; }
+.nf-dim       { color: var(--text-dim); opacity: 0.5; }
+.nf-countdown { color: var(--accent); font-weight: bold; }
+
+.nf-home-link {
+  color: var(--accent-2);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.nf-home-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.nf-sep {
+  border: none;
+  border-top: 1px solid rgba(0, 229, 255, 0.1);
+  margin: 6px 0;
+}
+
+@media (max-width: 600px) {
+  .notfound-terminal {
+    max-width: none;
+    width: 92vw;
+    padding: 18px 20px 20px;
+  }
+}

@@ -32,6 +32,9 @@ jobs:
       - name: Copy CNAME
         run: cp public/CNAME build/client/CNAME
 
+      - name: Create 404 fallback
+        run: cp build/client/index.html build/client/404.html
+
       - name: Deploy to gh-pages
         uses: peaceiris/actions-gh-pages@v4
         with:
