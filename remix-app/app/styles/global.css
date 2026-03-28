@@ -1876,6 +1876,11 @@ em {
   border-bottom-color: rgba(0, 229, 255, 0.25);
 }
 
+.blog-content strong {
+  color: var(--accent);
+  font-weight: 700;
+}
+
 .blog-content code {
   font-family: var(--font-mono);
   font-size: 0.85em;
