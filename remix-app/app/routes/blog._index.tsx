@@ -26,7 +26,7 @@ const posts = Object.entries(postModules)
     return b.slug.localeCompare(a.slug);
   });
 
-export const meta: MetaFunction = () => [{ title: "Blog — Asteriskx" }];
+export const meta: MetaFunction = () => [{ title: "Blog — ぽーとふぉりおっぽいもの" }];
 
 /**
  * ブログ記事一覧ページ（/blog）。
