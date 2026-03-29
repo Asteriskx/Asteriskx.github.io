@@ -32,7 +32,7 @@ export const meta: MetaFunction = () => [
  * `<Outlet>` の外側に配置している。
  */
 export default function App() {
-  const { pathname } = useLocation();
+  const { pathname }  = useLocation();
 
   // lazy initializer で初回レンダー時点から判定する。
   // useEffect 内で判定すると「useState(false) → 1フレーム露出 → true」の
@@ -115,7 +115,14 @@ export default function App() {
         {/* pathname をキーにすることでページ遷移のたびに fadeIn を発火 */}
         {/* blog 配下は同じキーに統一し、/blog → /blog/:slug で DOM が再マウントされて
             HydrateFallback が二重にちらつくのを防ぐ */}
-        <div key={pathname.startsWith("/blog") ? "blog" : pathname} className="page-transition">
+        {/* /blog/:slug では fadeIn（opacity animation）を無効化する。
+            iOS Safari で position:fixed 子要素（blog-hydrate）の位置が
+            親の opacity animation 中に左寄れするバグの回避策。 */}
+        <div
+          key={pathname.startsWith("/blog") ? "blog" : pathname}
+          className="page-transition"
+          style={/^\/blog\/.+/.test(pathname) ? { animation: "none" } : undefined}
+        >
           <Outlet />
         </div>
         <ScrollRestoration />
