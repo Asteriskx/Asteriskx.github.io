@@ -40,17 +40,15 @@ export default function App() {
   const [showLogin, setShowLogin] = useState(() => {
     if (typeof window === "undefined") return false; // SSG サーバー側スキップ
     if (window.location.pathname !== "/") return false;
-    const nav = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
-    const isReload = nav?.type === "reload";
-    return !sessionStorage.getItem("lo_done") || isReload;
+    // sessionStorage はタブを閉じると消えるが F5 では残る。
+    // isReload チェックを持たないことで「タブを閉じたら再度表示・F5 では表示しない」を実現する。
+    return !sessionStorage.getItem("lo_done");
   });
 
   // ルート遷移で "/" に来た場合（初回ロード以外）の検知用
   useEffect(() => {
     if (pathname !== "/") return;
-    const nav = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
-    const isReload = nav?.type === "reload";
-    if (!sessionStorage.getItem("lo_done") || isReload) setShowLogin(true);
+    if (!sessionStorage.getItem("lo_done")) setShowLogin(true);
   }, [pathname]);
 
   // ログインアニメーション中はスクロールをロック。
