@@ -8,13 +8,15 @@ import { CustomCursor } from "./components/CustomCursor";
 import { ClickFireworks } from "./components/ClickFireworks";
 import { LoginOverlay } from "./components/LoginOverlay";
 
+// Google Fonts を非同期で読み込むため media="print" → onload で swap する。
+// こうすることでフォント CSS がレンダリングをブロックしなくなる。
+const FONT_CSS_HREF =
+  "https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@700;900&display=swap";
+
 export const links: LinksFunction = () => [
   { rel: "icon", href: "/assets/image/logo-v5.png", type: "image/png" },
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
-  {
-    rel: "stylesheet",
-    href: "https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@700;900&display=swap",
-  },
+  { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
   { rel: "stylesheet", href: globalStyles },
 ];
 
@@ -81,6 +83,17 @@ export default function App() {
         <style dangerouslySetInnerHTML={{ __html: "html,body{background:#181c2a}" }} />
         <Meta />
         <Links />
+        {/* Google Fonts を非同期読み込み（media="print" → onload で swap してレンダリングブロックを回避） */}
+        <link
+          rel="stylesheet"
+          href={FONT_CSS_HREF}
+          media="print"
+          // @ts-expect-error — onLoad は React の型定義に存在しないが、HTML 仕様では有効
+          onLoad="this.media='all'"
+        />
+        <noscript>
+          <link rel="stylesheet" href={FONT_CSS_HREF} />
+        </noscript>
         {/* OGP / Twitter Card — MetaFunction では子ルートに上書きされるためここに直書き */}
         <meta property="og:type"         content="website" />
         <meta property="og:url"          content="https://asteriskx.net/" />

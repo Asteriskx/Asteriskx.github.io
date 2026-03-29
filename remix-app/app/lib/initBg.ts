@@ -1242,12 +1242,21 @@ export function initBg(
     tileGeo.dispose();
     tileMat.dispose();
     rippleRings.forEach(ring => {
+      scene.remove(ring.mesh);           // シーングラフから除去してから dispose
       ring.mesh.geometry.dispose();
       ring.mat.dispose();
     });
-    renderer.dispose();
+    // ヘルパーシーンのマテリアル解放
+    quadGeo.dispose();
+    blitMat.dispose();
+    fadeMat.dispose();
+    outMat.dispose();
+    // RenderTarget はテクスチャも明示的に解放
+    rtA.texture.dispose();
+    rtB.texture.dispose();
     rtA.dispose();
     rtB.dispose();
+    renderer.dispose();
     particleGeo.dispose();
     particleMat.dispose();
     trailGeo.dispose();

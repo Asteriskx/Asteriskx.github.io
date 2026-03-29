@@ -1027,14 +1027,21 @@ export function initBgDemo(
     resizeObserver.disconnect();
     canvas.removeEventListener("click", onRippleClick);
     rippleRings.forEach(ring => {
+      scene.remove(ring.mesh);
       ring.mesh.geometry.dispose();
       ring.mat.dispose();
     });
     tileGeo.dispose();
     tileMat.dispose();
-    renderer.dispose();
+    quadGeo.dispose();
+    blitMat.dispose();
+    fadeMat.dispose();
+    outMat.dispose();
+    rtA.texture.dispose();
+    rtB.texture.dispose();
     rtA.dispose();
     rtB.dispose();
+    renderer.dispose();
     particleGeo.dispose();
     particleMat.dispose();
     trailGeo.dispose();

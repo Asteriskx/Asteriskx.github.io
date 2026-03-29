@@ -123,6 +123,9 @@ function imageToAscii(src: string, w: number, h: number): Promise<string[]> {
         }
         lines.push(line);
       }
+      // 一時 Canvas を解放してメモリリークを防止
+      canvas.width = 0;
+      canvas.height = 0;
       resolve(lines);
     };
     img.onerror = () => resolve(FALLBACK_ART);
