@@ -113,7 +113,9 @@ export default function App() {
         <ClientOnly>{() => <CustomCursor />}</ClientOnly>
         <ClientOnly>{() => <ClickFireworks />}</ClientOnly>
         {/* pathname をキーにすることでページ遷移のたびに fadeIn を発火 */}
-        <div key={pathname} className="page-transition">
+        {/* blog 配下は同じキーに統一し、/blog → /blog/:slug で DOM が再マウントされて
+            HydrateFallback が二重にちらつくのを防ぐ */}
+        <div key={pathname.startsWith("/blog") ? "blog" : pathname} className="page-transition">
           <Outlet />
         </div>
         <ScrollRestoration />
