@@ -81,7 +81,7 @@ const WORKS: Work[] = [
     year: "2026～",
     cat: "Language Design",
     title: "Mryl",
-    desc1: "C / C++ / C# / Rust から影響を受けた自作プログラミング言語。",
+    desc1: "C / C++ / C# / Rust から影響を受けた自作プログラミング言語（ミリルと読みます）。",
     desc2: "セルフホスティングと自作コンパイラ・ネイティブ実行環境構築を目指す個人プロジェクト。",
     stack: ["Python", "C", "GCC", "Cygwin"],
     link: "https://github.com/Mryl-Dev/Mryl",
