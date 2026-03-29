@@ -90,6 +90,10 @@ export function initBg(
   // WebGL のデフォルト状態による白発光を防ぐため、最速で暗色クリアを実行する。
   // setSize より前に setClearColor + clear() を呼ぶことで、
   // レンダラー生成〜初期フレームの間もキャンバスが暗い状態を保つ。
+  // Three.js r152 以降で outputColorSpace のデフォルトが SRGBColorSpace に変わった。
+  // SRGBColorSpace だとシェーダーのリニアカラーにガンマ補正がかかり白靄・白発光が生じる。
+  // LinearSRGBColorSpace を明示してリニア出力を維持する（旧 LinearEncoding 相当）。
+  (renderer as any).outputColorSpace = "srgb-linear";
   renderer.setClearColor(new THREE.Color(0x181c2a), 1);
   renderer.clear();
   renderer.setPixelRatio(DPR);
@@ -421,11 +425,11 @@ export function initBg(
         if (uPhaseT >= 2.0) {
           // FORMED：エメラルドセンター、翠エッジ
           col   = r < 0.22 ? emerald : jade;
-          alpha = r < 0.22 ? 0.95 : 0.90;
+          alpha = r < 0.22 ? 1.00 : 0.95;
         } else {
           // GATHERING：目標に近いものだけ表示（vAlpha で距離フェードイン）
           col   = jade;
-          alpha = 0.90;
+          alpha = 0.95;
         }
 
         gl_FragColor = vec4(col, alpha * vAlpha);
@@ -635,7 +639,7 @@ export function initBg(
         // 波の遅延: アスタリスク中心からの距離ベース（中心=0 → 外周=1 の放射波）
         tileDelays[i] = Math.sqrt(dx * dx + dy * dy) / maxDist;
         // 全タイル均一 alpha（パーティクルエリアも含めて表示する）
-        tileAlphas[i] = 0.50;
+        tileAlphas[i] = 0.56;
       }
     }
     tileAstAttr.needsUpdate   = true;
@@ -921,7 +925,7 @@ export function initBg(
     trailPosArr[i * 6 + 4] = p.y;
     trailPosArr[i * 6 + 5] = p.z;
     trailColArr[i * 6 + 3] = 1.0; trailColArr[i * 6 + 4] = 1.0; trailColArr[i * 6 + 5] = 1.0;
-    trailAlpArr[i * 2 + 1] = 0.75;
+    trailAlpArr[i * 2 + 1] = 0.82;
   }
 
   function clearTrail(i: number) {
@@ -1101,7 +1105,7 @@ export function initBg(
       particlePosArr[i * 3 + 1] = p.y;
       particlePosArr[i * 3 + 2] = p.z;
       // フェーズ問わず均一サイズ。velocity ボーナスは視覚的にアンバランスになるため除去。
-      particleSizeArr[i] = p.sz * 4.0;
+      particleSizeArr[i] = p.sz * 4.3;
 
       // GATHERING 中：序盤は目標基準（初回ランダム配置の散乱を防ぐ）、
       // 終盤は中心円基準（丸型演出）へ progress に応じてブレンド。

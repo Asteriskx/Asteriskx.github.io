@@ -69,6 +69,10 @@ export function initBgDemo(
   // ─── レンダラー ─────────────────────────────────────────────────────────────
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, preserveDrawingBuffer: true });
+  // Three.js r152 以降で outputColorSpace のデフォルトが SRGBColorSpace に変わった。
+  // SRGBColorSpace だとシェーダーのリニアカラーにガンマ補正がかかり白靄・白発光が生じる。
+  // LinearSRGBColorSpace を明示してリニア出力を維持する（旧 LinearEncoding 相当）。
+  (renderer as any).outputColorSpace = "srgb-linear";
   renderer.setClearColor(new THREE.Color(0x181c2a), 1);
   renderer.clear();
   renderer.setPixelRatio(DPR);
@@ -355,10 +359,10 @@ export function initBgDemo(
 
         if (uPhaseT >= 2.0) {
           col   = r < 0.22 ? emerald : jade;
-          alpha = r < 0.22 ? 0.95 : 0.90;
+          alpha = r < 0.22 ? 1.00 : 0.95;
         } else {
           col   = jade;
-          alpha = 0.90;
+          alpha = 0.95;
         }
 
         gl_FragColor = vec4(col, alpha * vAlpha);
@@ -539,7 +543,7 @@ export function initBgDemo(
                       (dy === 0 || dx === 0 || Math.abs(dx) === Math.abs(dy));
         tileIsAsterisk[i] = isAst ? 1.0 : 0.0;
         tileDelays[i]     = Math.sqrt(dx * dx + dy * dy) / maxDist;
-        tileAlphas[i]     = 0.50;
+        tileAlphas[i]     = 0.56;
       }
     }
     tileAstAttr.needsUpdate   = true;
@@ -778,7 +782,7 @@ export function initBgDemo(
     trailPosArr[i * 6 + 4] = p.y;
     trailPosArr[i * 6 + 5] = p.z;
     trailColArr[i * 6 + 3] = 1.0; trailColArr[i * 6 + 4] = 1.0; trailColArr[i * 6 + 5] = 1.0;
-    trailAlpArr[i * 2 + 1] = 0.75;
+    trailAlpArr[i * 2 + 1] = 0.82;
   }
 
   function clearTrail(i: number) {
@@ -924,7 +928,7 @@ export function initBgDemo(
       particlePosArr[i * 3]     = p.x;
       particlePosArr[i * 3 + 1] = p.y;
       particlePosArr[i * 3 + 2] = p.z;
-      particleSizeArr[i] = p.sz * 4.0;
+      particleSizeArr[i] = p.sz * 4.3;
 
       const velocity = Math.hypot(p.vx, p.vy);
 
