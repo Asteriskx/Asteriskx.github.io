@@ -2336,6 +2336,37 @@ em {
 .lo-launch    { color: #00e5ff; margin-top: 12px; }
 .lo-skip-hint { color: rgba(255,255,255,0.5); font-size: 0.72rem; margin-top: 4px; }
 
+/* BgCanvas: ローディングオーバーレイ */
+@keyframes overlay-spin {
+  from { transform: rotate(0deg)   scale(1.0); opacity: 0.6; }
+  50%  { transform: rotate(180deg) scale(1.15); opacity: 1.0; }
+  to   { transform: rotate(360deg) scale(1.0); opacity: 0.6; }
+}
+@keyframes overlay-dots {
+  0%   { content: ".";   }
+  33%  { content: "..";  }
+  66%  { content: "..."; }
+  100% { content: ".";   }
+}
+.overlay-asterisk {
+  color:      #00e5ff;
+  font-size:  3.5rem;
+  animation:  overlay-spin 2.4s linear infinite;
+  text-shadow: 0 0 14px #00e5ff, 0 0 32px rgba(0,229,255,0.45);
+  display:    block;
+}
+.overlay-loading {
+  color:      rgba(0, 229, 255, 0.7);
+  font-size:  0.78rem;
+  letter-spacing: 0.18em;
+  margin-top: 18px;
+  font-family: "JetBrains Mono", monospace;
+}
+.overlay-loading::after {
+  content:   ".";
+  animation: overlay-dots 1.2s steps(1) infinite;
+}
+
 /* LoginOverlay: グロー点滅（_）— ターミナル的な雰囲気 */
 .lo-cursor {
   color: #00e5ff;

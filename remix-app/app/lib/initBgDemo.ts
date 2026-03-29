@@ -68,7 +68,8 @@ export function initBgDemo(
 
   // ─── レンダラー ─────────────────────────────────────────────────────────────
 
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, preserveDrawingBuffer: true });
+  // preserveDrawingBuffer は false（デフォルト）のままにする（initBg.ts と同じ理由）。
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
   // Three.js r152 以降で outputColorSpace のデフォルトが SRGBColorSpace に変わった。
   // SRGBColorSpace だとシェーダーのリニアカラーにガンマ補正がかかり白靄・白発光が生じる。
   // LinearSRGBColorSpace を明示してリニア出力を維持する（旧 LinearEncoding 相当）。
@@ -475,7 +476,7 @@ export function initBgDemo(
   }
 
   interface RippleRing {
-    mesh: THREE.LineLoop; mat: THREE.LineBasicMaterial;
+    mesh: THREE_NS.LineLoop; mat: THREE_NS.LineBasicMaterial;
     r: number; maxR: number; active: boolean;
   }
 
@@ -809,7 +810,8 @@ export function initBgDemo(
 
     const progress = phaseTimer / PHASE_DURATIONS[phase];
 
-    if ((phase === "FORMED" || phase === "DISPERSING") && phaseTimer === 1) {
+    // advancePhase() 直後は phaseTimer=0 なので === 0 で即クリアする（=== 1 だと1フレーム遅れて白発光）
+    if ((phase === "FORMED" || phase === "DISPERSING") && phaseTimer === 0) {
       renderer.setRenderTarget(rtA); renderer.clear();
       renderer.setRenderTarget(rtB); renderer.clear();
       renderer.setRenderTarget(null);

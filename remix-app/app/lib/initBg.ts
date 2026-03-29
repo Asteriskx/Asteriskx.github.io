@@ -83,16 +83,13 @@ export function initBg(
 
   // ─── レンダラー ─────────────────────────────────────────────────────────────
 
-  // preserveDrawingBuffer: true により、F5/ページ遷移で JS が停止した後も
-  // WebGL の最終フレーム（暗色）がキャンバスに残り、白発光を防ぐ。
-  // デフォルト false ではブラウザがバッファを即時破棄して白になる。
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, preserveDrawingBuffer: true });
-  // WebGL のデフォルト状態による白発光を防ぐため、最速で暗色クリアを実行する。
-  // setSize より前に setClearColor + clear() を呼ぶことで、
-  // レンダラー生成〜初期フレームの間もキャンバスが暗い状態を保つ。
+  // preserveDrawingBuffer: false（デフォルト）。
+  // true にすると F5 時に明るいフレームが次ページへ持ち越されて白発光する。
+  // 初期ロード時の白防止は BgCanvas.tsx の dark overlay が担う。
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
   // Three.js r152 以降で outputColorSpace のデフォルトが SRGBColorSpace に変わった。
-  // SRGBColorSpace だとシェーダーのリニアカラーにガンマ補正がかかり白靄・白発光が生じる。
-  // LinearSRGBColorSpace を明示してリニア出力を維持する（旧 LinearEncoding 相当）。
+  // SRGBColorSpace だとシェーダーのリニアカラーにガンマ補正がかかり白靄が生じるため
+  // LinearSRGBColorSpace（旧 LinearEncoding 相当）を明示する。
   (renderer as any).outputColorSpace = "srgb-linear";
   renderer.setClearColor(new THREE.Color(0x181c2a), 1);
   renderer.clear();
@@ -549,8 +546,8 @@ export function initBg(
   }
 
   interface RippleRing {
-    mesh:   THREE.LineLoop;
-    mat:    THREE.LineBasicMaterial;
+    mesh:   THREE_NS.LineLoop;
+    mat:    THREE_NS.LineBasicMaterial;
     r:      number;   // 現在の半径（px）
     maxR:   number;   // 最終半径
     active: boolean;
@@ -955,10 +952,12 @@ export function initBg(
 
     const progress = phaseTimer / PHASE_DURATIONS[phase];
 
-    // フェーズ開始直後（1フレーム目）は RTT をクリアしてトレイル残像をリセット。
+    // フェーズ開始直後（0フレーム目）は RTT をクリアしてトレイル残像をリセット。
+    // advancePhase() 直後は phaseTimer=0 なので === 0 で即クリアする。
+    // === 1 だと1フレーム遅れ、積み上がった明るいトレイルが1フレーム残って白発光する原因になる。
     // FORMED: GATHERING の螺旋トレイル積算をリセット
     // DISPERSING: FORMED の静止トレイル積算をリセット（矩形残像の再出現を防ぐ）
-    if ((phase === "FORMED" || phase === "DISPERSING") && phaseTimer === 1) {
+    if ((phase === "FORMED" || phase === "DISPERSING") && phaseTimer === 0) {
       renderer.setRenderTarget(rtA); renderer.clear();
       renderer.setRenderTarget(rtB); renderer.clear();
       renderer.setRenderTarget(null);
@@ -1229,20 +1228,12 @@ export function initBg(
 
   // ─── クリーンアップ ──────────────────────────────────────────────────────────
 
-  // ページ離脱直前に暗色フレームを確定描画する。
-  // preserveDrawingBuffer と組み合わせることで、F5/ナビゲーション後の白発光を防ぐ。
-  const onPageHide = () => {
-    renderer.setClearColor(new THREE.Color(0x181c2a), 1);
-    renderer.setRenderTarget(null);
-    renderer.clear();
-  };
-  window.addEventListener("pagehide", onPageHide);
 
   return () => {
     cancelAnimationFrame(animId);
     window.removeEventListener("resize",    onResize);
     window.removeEventListener("click",     onRippleClick);
-    window.removeEventListener("pagehide",  onPageHide);
+
     tileGeo.dispose();
     tileMat.dispose();
     rippleRings.forEach(ring => {
