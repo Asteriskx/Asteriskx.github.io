@@ -1,6 +1,7 @@
 import type { MetaFunction } from "react-router";
 import { Header } from "../components/Header";
 import { BackToTop } from "../components/BackToTop";
+import { Footer } from "../components/Footer";
 import { MatrixRainCard } from "../components/MatrixRainCard";
 import { useScrollReveal } from "../hooks/useScrollReveal";
 import type { PostFrontmatter } from "../types";
@@ -70,15 +71,7 @@ export default function BlogIndex() {
 
       <BackToTop />
 
-      <footer className="footer">
-        <span className="footer-copy">&copy; 2018&ndash;2026 Asteriskx</span>
-        <nav className="footer-nav" aria-label="Footer navigation">
-          <a href="/#about">about</a>
-          <a href="/#work">work</a>
-          <a href="/blog">blog</a>
-          <a href="/#contact">contact</a>
-        </nav>
-      </footer>
+      <Footer />
     </>
   );
 }

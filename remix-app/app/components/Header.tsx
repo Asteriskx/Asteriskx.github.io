@@ -4,16 +4,12 @@ import { useNavActive } from "../hooks/useNavActive";
 
 const TITLE = "ぽーとふぉりおっぽいもの";
 
-/** ブログ記事数（バッジ表示用） */
-const postCount = Object.keys(
-  import.meta.glob("../content/blog/*.mdx")
-).length;
-
-/** 最新記事日付（更新情報バッジ用） */
+/** 最新記事日付（更新情報バッジ用）・記事数（バッジ表示用） */
 const postModules = import.meta.glob<{ frontmatter: { date: string } }>(
   "../content/blog/*.mdx",
   { eager: true }
 );
+const postCount  = Object.keys(postModules).length;
 const latestDate = Object.values(postModules)
   .map((m) => m.frontmatter?.date ?? "")
   .sort((a, b) => b.localeCompare(a))[0] ?? null;

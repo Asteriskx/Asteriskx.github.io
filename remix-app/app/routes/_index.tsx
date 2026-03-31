@@ -3,6 +3,7 @@ import { ClientOnly } from "../components/ClientOnly";
 import { Header } from "../components/Header";
 import { HeroTerminal } from "../components/HeroTerminal";
 import { BackToTop } from "../components/BackToTop";
+import { Footer } from "../components/Footer";
 import { ScrollIndicator } from "../components/ScrollIndicator";
 import { MatrixRainCard } from "../components/MatrixRainCard";
 import { useScrollReveal } from "../hooks/useScrollReveal";
@@ -309,15 +310,7 @@ export default function Index() {
 
       <BackToTop />
 
-      <footer className="footer">
-        <span className="footer-copy">&copy; 2018&ndash;2026 Asteriskx</span>
-        <nav className="footer-nav" aria-label="Footer navigation">
-          <a href="#about">about</a>
-          <a href="#work">work</a>
-          <a href="#blog">blog</a>
-          <a href="#contact">contact</a>
-        </nav>
-      </footer>
+      <Footer isHome />
     </>
   );
 }
