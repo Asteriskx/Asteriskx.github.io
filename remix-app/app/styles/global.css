@@ -1600,6 +1600,11 @@ em {
 .blog-hydrate {
   position: fixed;
   inset: 0;
+  /* viewport units で幅・高さを明示することで iOS Safari の containing block バグを回避する。
+     position:fixed の祖先に opacity アニメーションがあると containing block がずれ、
+     inset:0 だけでは正しくセンタリングされないことがある。 */
+  width: 100vw;
+  height: 100vh;
   background: var(--bg);
   display: flex;
   align-items: center;

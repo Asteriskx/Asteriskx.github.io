@@ -15,11 +15,16 @@ export function BgCanvas() {
   const overlayContentRef  = useRef<HTMLDivElement>(null);
 
   // Three.js 初期化完了フラグ。
-  // state で持つことで「初期化後に別ページへ戻っても overlay が opacity:1 に戻らない」を保証する。
+  // state：overlay content の条件レンダリング用。
+  // ref ：useEffect の deps に含めず pathname 変化時に読むための同期フラグ。
   const [initialized, setInitialized] = useState(false);
+  const initializedRef = useRef(false);
 
-  // overlay の表示条件：未初期化 かつ blog 記事ページでない場合のみ表示
-  const overlayOpacity = initialized || isBlogPost ? 0 : 1;
+  // overlay の opacity は React style prop で管理しない。
+  // 理由：initialized=true 後は overlayOpacity が常に 0 で固定されるため、
+  //       click handler が DOM を opacity:1 にしても React は「差分なし」と判断し
+  //       DOM を修正しないバグが発生する（React の style diff 最適化との競合）。
+  // → opacity はすべて直接 DOM 操作で管理する。
 
   useEffect(() => {
     // /blog/:slug リンクがクリックされた瞬間に overlay を即時暗幕化する。
@@ -41,6 +46,26 @@ export function BgCanvas() {
     document.addEventListener("click", handleClick, true);
     return () => document.removeEventListener("click", handleClick, true);
   }, []);
+
+  // Three.js 初期化完了 → overlay フェードアウト（1.5s）。
+  // transition は Three.js init 内で DOM に直接セット済みのため、ここでは opacity だけ変える。
+  useEffect(() => {
+    if (!initialized) return;
+    const overlay = overlayRef.current;
+    if (overlay) overlay.style.opacity = "0";
+  }, [initialized]);
+
+  // ページ遷移のたびに overlay を即座に 0 へリセット。
+  // click handler や pagehide が opacity:1 にした後、React の style diff では
+  // 差分が検出されないため useEffect で直接 DOM をリセットする必要がある。
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!initializedRef.current) return;
+    const overlay = overlayRef.current;
+    if (!overlay) return;
+    overlay.style.transition = "none";
+    overlay.style.opacity    = "0";
+  }, [pathname]);
 
   useEffect(() => {
     let animationId: number | null = null;
@@ -70,9 +95,11 @@ export function BgCanvas() {
         animationId = id;
       });
 
-      // transition を先に DOM へセットしてからフラグを立てる（フェードアウト演出）
+      // transition を先に DOM へセットしてからフラグを立てる（フェードアウト演出）。
+      // setInitialized(true) のあと useEffect([initialized]) が opacity:0 を適用する。
       const overlay = overlayRef.current;
       if (overlay) overlay.style.transition = "opacity 1.5s ease";
+      initializedRef.current = true;
       setInitialized(true);
     })();
 
@@ -95,10 +122,10 @@ export function BgCanvas() {
           background:    "#181c2a",
           zIndex:        9999,
           pointerEvents: "none",
-          opacity:       overlayOpacity,
           display:       "flex",
           alignItems:    "center",
           justifyContent:"center",
+          // opacity はここで管理しない（上記コメント参照）
         }}
       >
         {!isBlogPost && (
