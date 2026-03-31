@@ -55,14 +55,26 @@ export function BgCanvas() {
     if (overlay) overlay.style.opacity = "0";
   }, [initialized]);
 
-  // ページ遷移のたびに overlay を即座に 0 へリセット。
+  // ページ遷移のたびに overlay をリセット。
   // click handler や pagehide が opacity:1 にした後、React の style diff では
   // 差分が検出されないため useEffect で直接 DOM をリセットする必要がある。
+  //
+  // blog 記事ページ: Three.js 初期化前でも即座に透明化する。
+  //   理由: handleClick が opacity:1 にした後、Three.js がまだ未初期化（initializedRef=false）の
+  //         場合に early return すると overlay が暗幕のまま固まるバグが発生する。
+  //         blog-hydrate が独自のローディング UI を提供するため、overlay は不要。
+  // 非ブログページ: Three.js 初期化済みの場合のみリセット（初期ローディング演出を維持）。
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (!initializedRef.current) return;
     const overlay = overlayRef.current;
     if (!overlay) return;
+    if (/^\/blog\/.+/.test(pathname)) {
+      // blog 記事: Three.js 初期化状態に関わらず即座に透明化
+      overlay.style.transition = "none";
+      overlay.style.opacity    = "0";
+      return;
+    }
+    if (!initializedRef.current) return;
     overlay.style.transition = "none";
     overlay.style.opacity    = "0";
   }, [pathname]);

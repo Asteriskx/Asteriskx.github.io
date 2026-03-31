@@ -22,10 +22,10 @@ export async function clientLoader({ params }: Route.ClientLoaderArgs) {
   const loader = modules[key];
   if (!loader) throw new Response("Not Found", { status: 404 });
 
-  // 記事が軽くても最低 500ms はローディングを見せる
+  // 記事が軽くても最低 300ms はローディングを見せる（blog-hydrate アニメーションのチラつき防止）
   const [mod] = await Promise.all([
     loader(),
-    new Promise(r => setTimeout(r, 1000)),
+    new Promise(r => setTimeout(r, 300)),
   ]);
   return { Component: mod.default, frontmatter: mod.frontmatter };
 }
