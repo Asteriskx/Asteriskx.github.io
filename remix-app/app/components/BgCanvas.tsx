@@ -55,8 +55,8 @@ export function BgCanvas() {
     if (overlay) overlay.style.opacity = "0";
   }, [initialized]);
 
-  // ページ遷移のたびに overlay をリセット。
-  // click handler や pagehide が opacity:1 にした後、React の style diff では
+  // ページ遷移のたびに overlay と canvas filter をリセット。
+  // click handler や pagehide が opacity:1 / brightness(0) にした後、React の style diff では
   // 差分が検出されないため useEffect で直接 DOM をリセットする必要がある。
   //
   // blog 記事ページ: Three.js 初期化前でも即座に透明化する。
@@ -68,15 +68,19 @@ export function BgCanvas() {
   useEffect(() => {
     const overlay = overlayRef.current;
     if (!overlay) return;
+    const cv = canvasRef.current;
     if (/^\/blog\/.+/.test(pathname)) {
       // blog 記事: Three.js 初期化状態に関わらず即座に透明化
+      // pagehide で brightness(0) になった canvas も同時にリセット
       overlay.style.transition = "none";
       overlay.style.opacity    = "0";
+      if (cv) cv.style.filter  = "";
       return;
     }
     if (!initializedRef.current) return;
     overlay.style.transition = "none";
     overlay.style.opacity    = "0";
+    if (cv) cv.style.filter  = "";
   }, [pathname]);
 
   useEffect(() => {
@@ -92,8 +96,22 @@ export function BgCanvas() {
       const cv = canvasRef.current;
       if (cv) cv.style.filter = "brightness(0)";
     };
+    // bfcache（前後ナビゲーションキャッシュ）から復元された際、
+    // pagehide で opacity:1 / brightness(0) にした状態が残るため元に戻す。
+    // persisted=false（通常のページロード）は対象外。
+    const restoreFromCache = (e: PageTransitionEvent) => {
+      if (!e.persisted) return;
+      const overlay = overlayRef.current;
+      if (overlay) {
+        overlay.style.transition = "none";
+        overlay.style.opacity    = "0";
+      }
+      const cv = canvasRef.current;
+      if (cv) cv.style.filter = "";
+    };
     window.addEventListener("pagehide",     showOverlay);
     window.addEventListener("beforeunload", showOverlay);
+    window.addEventListener("pageshow",     restoreFromCache);
 
     (async () => {
       const [THREE, iconDataUrls] = await Promise.all([
@@ -119,6 +137,7 @@ export function BgCanvas() {
       if (animationId !== null) cancelAnimationFrame(animationId);
       window.removeEventListener("pagehide",     showOverlay);
       window.removeEventListener("beforeunload", showOverlay);
+      window.removeEventListener("pageshow",     restoreFromCache);
       cleanup?.();
     };
   }, []);

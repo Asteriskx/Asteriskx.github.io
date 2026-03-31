@@ -1600,11 +1600,10 @@ em {
 .blog-hydrate {
   position: fixed;
   inset: 0;
-  /* viewport units で幅・高さを明示することで iOS Safari の containing block バグを回避する。
-     position:fixed の祖先に opacity アニメーションがあると containing block がずれ、
-     inset:0 だけでは正しくセンタリングされないことがある。 */
-  width: 100vw;
-  height: 100vh;
+  /* iOS Safari の containing block バグ（opacity animation が祖先にあると fixed が viewport 基準にならない）は
+     root.tsx で /blog/:slug の page-transition に animation:none を適用することで回避済み。
+     width/height: 100vw/vh は「URL バー表示時に 100vh > 可視領域」となり flex center がずれるため削除。
+     inset:0 が position:fixed の正しい viewport 全体へのストレッチを保証する。 */
   background: var(--bg);
   display: flex;
   align-items: center;
@@ -1631,7 +1630,7 @@ em {
 
 .blog-hydrate-progress {
   display: block;
-  width: 220px;
+  width: 100%;
   height: 2px;
   background: rgba(0, 229, 255, 0.12);
   border-radius: 999px;
