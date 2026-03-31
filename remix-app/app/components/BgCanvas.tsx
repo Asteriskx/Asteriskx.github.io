@@ -81,6 +81,10 @@ export function BgCanvas() {
     overlay.style.transition = "none";
     overlay.style.opacity    = "0";
     if (cv) cv.style.filter  = "";
+    // handleClick が visibility:hidden にした ＊ を復元する。
+    // blog ページを経由して非ブログページへ戻った際に ＊ が消えたままになるバグへの対処。
+    const content = overlayContentRef.current;
+    if (content) content.style.visibility = "";
   }, [pathname]);
 
   useEffect(() => {
@@ -108,6 +112,8 @@ export function BgCanvas() {
       }
       const cv = canvasRef.current;
       if (cv) cv.style.filter = "";
+      const content = overlayContentRef.current;
+      if (content) content.style.visibility = "";
     };
     window.addEventListener("pagehide",     showOverlay);
     window.addEventListener("beforeunload", showOverlay);

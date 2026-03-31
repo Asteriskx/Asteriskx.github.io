@@ -1617,7 +1617,10 @@ em {
   gap: 0.55rem;
   font-family: var(--font-mono);
   font-size: 1rem;
+  max-width: calc(100vw - 2rem);
 }
+
+
 
 .blog-hydrate-comment {
   color: var(--text-dim);
@@ -1626,6 +1629,9 @@ em {
 
 .blog-hydrate-cmd {
   color: var(--accent);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .blog-hydrate-progress {
