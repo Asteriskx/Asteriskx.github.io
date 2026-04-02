@@ -4,6 +4,7 @@ import type { Route } from "./+types/blog.$slug";
 import { Header } from "../components/Header";
 import { BackToTop } from "../components/BackToTop";
 import { Footer } from "../components/Footer";
+import { CodeBlock } from "../components/CodeBlock";
 import type { PostFrontmatter } from "../types";
 
 /**
@@ -78,7 +79,11 @@ export default function BlogPost() {
         </div>
 
         <div className="blog-content">
-          <Component />
+          {/* MDX コンポーネントは components prop を受け取れるが型定義に含まれないためキャスト */}
+          {(() => {
+            const MDX = Component as React.ComponentType<{ components?: Record<string, React.ComponentType<any>> }>;
+            return <MDX components={{ pre: CodeBlock }} />;
+          })()}
         </div>
       </section>
 
