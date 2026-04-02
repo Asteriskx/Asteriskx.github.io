@@ -7,6 +7,7 @@ import { Footer } from "../components/Footer";
 import { ScrollIndicator } from "../components/ScrollIndicator";
 import { MatrixRainCard } from "../components/MatrixRainCard";
 import { useScrollReveal } from "../hooks/useScrollReveal";
+import { SakuraHint } from "../components/SakuraHint";
 import type { PostFrontmatter } from "../types";
 
 export const meta: MetaFunction = () => [
@@ -179,7 +180,8 @@ export default function Index() {
       <ClientOnly>{() => <ScrollIndicator />}</ClientOnly>
 
       {/* 01. About / Hero */}
-      <section className="hero section" id="about">
+      <section className="hero section" id="about" style={{ position: "relative" }}>
+        <SakuraHint />
         <div className="section-head reveal">
           <span className="sec-num">01</span>
           <span className="sec-label"><span className="sec-scan" data-text="About">About</span></span>

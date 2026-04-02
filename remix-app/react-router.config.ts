@@ -19,6 +19,7 @@ export default {
     return [
       "/",
       "/blog",
+      "/sakura",
       ...slugs.map((s) => `/blog/${s}`),
     ];
   },

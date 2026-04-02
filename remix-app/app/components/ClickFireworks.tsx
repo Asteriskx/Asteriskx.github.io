@@ -1,8 +1,10 @@
 import { useEffect, useRef } from "react";
+import { useLocation } from "react-router";
 
 /** クリック1回で生成するスパーク数 */
 const PARTICLE_COUNT = 14;
-const COLORS = ["#00e5ff", "#ffffff", "#7ecfdd", "#00bcd4", "#e0f7fa"];
+const COLORS        = ["#00e5ff", "#ffffff", "#7ecfdd", "#00bcd4", "#e0f7fa"];
+const SAKURA_COLORS = ["#FFB7C5", "#FFC0CB", "#FFD0DC", "#FFE4EC", "#ffffff"];
 
 /** クリック爆発エフェクトの1パーティクル */
 interface Spark {
@@ -28,9 +30,15 @@ interface Spark {
  * 重力・空気抵抗・フェードアウトをシミュレートし、alpha が 0.02 以下の Spark は自動削除する。
  */
 export function ClickFireworks() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const sparksRef = useRef<Spark[]>([]);
-  const rafRef    = useRef<number | null>(null);
+  const canvasRef  = useRef<HTMLCanvasElement>(null);
+  const sparksRef  = useRef<Spark[]>([]);
+  const rafRef     = useRef<number | null>(null);
+  // pathname 変化に応じてカラーパレットを切り替える。
+  // useEffect の deps に含めず ref 経由で参照することで
+  // イベントリスナーを再登録せずに最新の色を使える。
+  const { pathname } = useLocation();
+  const colorsRef  = useRef(COLORS);
+  colorsRef.current = pathname === "/sakura" ? SAKURA_COLORS : COLORS;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -56,7 +64,7 @@ export function ClickFireworks() {
           vy:     Math.sin(angle) * speed,
           alpha:  1,
           radius: 1.5 + Math.random() * 2,
-          color:  COLORS[Math.floor(Math.random() * COLORS.length)],
+          color:  colorsRef.current[Math.floor(Math.random() * colorsRef.current.length)],
         });
       }
     };

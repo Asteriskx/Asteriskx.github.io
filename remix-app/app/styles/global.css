@@ -2615,3 +2615,94 @@ em {
     padding: 18px 20px 20px;
   }
 }
+
+/* ===========================
+   Sakura (/sakura)
+   =========================== */
+
+.sakura-back {
+  position:    fixed;
+  top:         1.5rem;
+  left:        1.5rem;
+  z-index:     10;
+  color:       #FFB7C5;
+  font-family: var(--font-mono);
+  font-size:   0.85rem;
+  text-decoration: none;
+  opacity:     0.75;
+  letter-spacing: 0.05em;
+  transition:  opacity 0.2s;
+}
+
+.sakura-back:hover {
+  opacity: 1;
+}
+
+.sakura-title {
+  position:    fixed;
+  bottom:      2rem;
+  right:       2rem;
+  z-index:     10;
+  color:       #FFB7C5;
+  font-family: var(--font-display);
+  font-size:   clamp(2rem, 5vw, 3.5rem);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  opacity:     0.18;
+  pointer-events: none;
+  user-select: none;
+}
+
+@media (max-width: 600px) {
+  .sakura-title {
+    font-size: 1.8rem;
+    bottom:    1.2rem;
+    right:     1.2rem;
+  }
+}
+
+/* ===========================
+   Sakura Hint（ホームのイースターエッグ）
+   =========================== */
+
+.sakura-hint {
+  position:   absolute;
+  /* ヒーロー内のターミナルウィンドウ付近に配置 */
+  top:        28%;
+  left:       52%;
+  width:      48px;
+  height:     48px;
+  background: none;
+  border:     none;
+  cursor:     pointer;
+  padding:    0;
+  z-index:    5;
+}
+
+.sakura-hint-flower {
+  width:      100%;
+  height:     100%;
+  opacity:    0.55;
+  transition: opacity 0.3s, transform 0.3s;
+  animation:  sakura-hint-float 6s ease-in-out infinite;
+}
+
+.sakura-hint:hover .sakura-hint-flower {
+  opacity:   0.90;
+  transform: scale(1.15);
+}
+
+/* ふわふわ浮遊アニメーション */
+@keyframes sakura-hint-float {
+  0%   { transform: translateY(0px)  rotate(0deg); }
+  30%  { transform: translateY(-5px) rotate(6deg); }
+  60%  { transform: translateY(3px)  rotate(-4deg); }
+  100% { transform: translateY(0px)  rotate(0deg); }
+}
+
+@media (max-width: 768px) {
+  .sakura-hint {
+    top:  22%;
+    left: 50%;
+  }
+}
