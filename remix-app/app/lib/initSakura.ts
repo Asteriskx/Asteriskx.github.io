@@ -4,9 +4,9 @@ import type * as THREE_NS from "three";
 
 const MOBILE_BREAKPOINT  = 768;
 const PETAL_COUNT_PC     = 800;
-const PETAL_COUNT_MOBILE = 200;
+const PETAL_COUNT_MOBILE = 450;
 
-const BG_BLOSSOM_COUNT = 18;
+const BG_BLOSSOM_COUNT = 20;
 const BG_STAR_COUNT    = 80;
 
 const SAKURA_COLORS = [0xFFB7C5, 0xFFC0CB, 0xFFD0DC, 0xFFE4EC, 0xFFF5F8];
