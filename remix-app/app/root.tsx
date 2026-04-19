@@ -23,6 +23,17 @@ export const links: LinksFunction = () => [
 export const meta: MetaFunction = () => [
   { title: "ぽーとふぉりおっぽいもの" },
   { name: "description", content: "If it doesn't exist, that's reason enough to build it." },
+  { property: "og:type",         content: "website" },
+  { property: "og:url",          content: "https://asteriskx.net/" },
+  { property: "og:title",        content: "ぽーとふぉりおっぽいもの" },
+  { property: "og:description",  content: "If it doesn't exist, that's reason enough to build it." },
+  { property: "og:image",        content: "https://asteriskx.net/assets/image/ogp.png" },
+  { property: "og:image:width",  content: "1200" },
+  { property: "og:image:height", content: "630" },
+  { name: "twitter:card",        content: "summary_large_image" },
+  { name: "twitter:title",       content: "ぽーとふぉりおっぽいもの" },
+  { name: "twitter:description", content: "If it doesn't exist, that's reason enough to build it." },
+  { name: "twitter:image",       content: "https://asteriskx.net/assets/image/ogp.png" },
 ];
 
 /**
@@ -92,18 +103,6 @@ export default function App() {
         <noscript>
           <link rel="stylesheet" href={FONT_CSS_HREF} />
         </noscript>
-        {/* OGP / Twitter Card — MetaFunction では子ルートに上書きされるためここに直書き */}
-        <meta property="og:type"         content="website" />
-        <meta property="og:url"          content="https://asteriskx.net/" />
-        <meta property="og:title"        content="ぽーとふぉりおっぽいもの" />
-        <meta property="og:description"  content="If it doesn't exist, that's reason enough to build it." />
-        <meta property="og:image"        content="https://asteriskx.net/assets/image/ogp.png" />
-        <meta property="og:image:width"  content="1200" />
-        <meta property="og:image:height" content="630" />
-        <meta name="twitter:card"        content="summary_large_image" />
-        <meta name="twitter:title"       content="ぽーとふぉりおっぽいもの" />
-        <meta name="twitter:description" content="If it doesn't exist, that's reason enough to build it." />
-        <meta name="twitter:image"       content="https://asteriskx.net/assets/image/ogp.png" />
       </head>
       <body style={{ background: "#181c2a" }}>
         {showLogin && <LoginOverlay onDone={handleLoginDone} />}

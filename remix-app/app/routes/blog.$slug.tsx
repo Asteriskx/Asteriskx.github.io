@@ -32,12 +32,30 @@ export async function clientLoader({ params }: Route.ClientLoaderArgs) {
   return { Component: mod.default, frontmatter: mod.frontmatter };
 }
 
-export const meta: MetaFunction = ({ matches }) => {
+export const meta: MetaFunction = ({ matches, params }) => {
   const self = matches[matches.length - 1] as { data?: { frontmatter?: PostFrontmatter } };
-  const d = self?.data;
+  const fm = self?.data?.frontmatter;
+  const slug = params.slug ?? "";
+
+  const title = fm?.title ? `${fm.title} — Asteriskx` : "Blog — Asteriskx";
+  const description = fm?.description ?? "If it doesn't exist, that's reason enough to build it.";
+  const ogTitle = fm?.title ?? "ぽーとふぉりおっぽいもの";
+  const ogUrl = `https://asteriskx.net/blog/${slug}`;
+
   return [
-    { title: d?.frontmatter?.title ? `${d.frontmatter.title} — Asteriskx` : "Blog — Asteriskx" },
-    { name: "description", content: d?.frontmatter?.description ?? "" },
+    { title },
+    { name: "description",          content: description },
+    { property: "og:type",          content: "article" },
+    { property: "og:url",           content: ogUrl },
+    { property: "og:title",         content: ogTitle },
+    { property: "og:description",   content: description },
+    { property: "og:image",         content: "https://asteriskx.net/assets/image/ogp.png" },
+    { property: "og:image:width",   content: "1200" },
+    { property: "og:image:height",  content: "630" },
+    { name: "twitter:card",         content: "summary_large_image" },
+    { name: "twitter:title",        content: ogTitle },
+    { name: "twitter:description",  content: description },
+    { name: "twitter:image",        content: "https://asteriskx.net/assets/image/ogp.png" },
   ];
 };
 
@@ -75,7 +93,16 @@ export default function BlogPost() {
         <div className="blog-post-header">
           <a href="/blog" className="blog-back">[ ← back ]</a>
           <h1 className="blog-post-title">{frontmatter.title}</h1>
-          <time className="blog-post-date">{frontmatter.date}</time>
+          <div className="blog-post-meta">
+            <time className="blog-post-date">{frontmatter.date}</time>
+            {frontmatter.tags && frontmatter.tags.length > 0 && (
+              <div className="blog-tags">
+                {frontmatter.tags.map((tag) => (
+                  <span key={tag} className="blog-tag">{tag}</span>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="blog-content">

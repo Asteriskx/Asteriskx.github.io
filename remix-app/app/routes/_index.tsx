@@ -12,6 +12,18 @@ import type { PostFrontmatter } from "../types";
 
 export const meta: MetaFunction = () => [
   { title: "ぽーとふぉりおっぽいもの" },
+  { name: "description",          content: "If it doesn't exist, that's reason enough to build it." },
+  { property: "og:type",          content: "website" },
+  { property: "og:url",           content: "https://asteriskx.net/" },
+  { property: "og:title",         content: "ぽーとふぉりおっぽいもの" },
+  { property: "og:description",   content: "If it doesn't exist, that's reason enough to build it." },
+  { property: "og:image",         content: "https://asteriskx.net/assets/image/ogp.png" },
+  { property: "og:image:width",   content: "1200" },
+  { property: "og:image:height",  content: "630" },
+  { name: "twitter:card",         content: "summary_large_image" },
+  { name: "twitter:title",        content: "ぽーとふぉりおっぽいもの" },
+  { name: "twitter:description",  content: "If it doesn't exist, that's reason enough to build it." },
+  { name: "twitter:image",        content: "https://asteriskx.net/assets/image/ogp.png" },
 ];
 
 // ─── Stack tag category → CSS class マッピング ───────────────────────────────
