@@ -298,6 +298,7 @@ export function initBg(
     "/assets/image/logo-v3.png",
     "/assets/image/logo-v2.png",
     "/assets/image/logo-v5.png",
+    "/assets/image/logo-v6.png",
   ];
   const dataUrls = iconDataUrls.length > 0 ? iconDataUrls : fallbackUrls;
 

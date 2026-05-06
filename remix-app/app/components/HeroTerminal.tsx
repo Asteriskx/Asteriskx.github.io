@@ -6,6 +6,7 @@ const LOGOS = [
   "/assets/image/logo-v3.png",
   "/assets/image/logo-v4.png",
   "/assets/image/logo-v5.png",
+  "/assets/image/logo-v6.png",
 ];
 
 /**
