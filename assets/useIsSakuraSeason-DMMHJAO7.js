@@ -1,0 +1,1 @@
+const m={sakura:{start:[3,15],end:[4,30]},summer:{start:[7,1],end:[8,31]},autumn:{start:[10,15],end:[11,30]},winter:{start:[12,20],end:[1,15]}};function D(u){const{start:a,end:r}=m[u],o=new Date,c=o.getMonth()+1,d=o.getDate(),n=(S,i)=>S*100+i,t=n(c,d),s=n(a[0],a[1]),e=n(r[0],r[1]);return s>e?t>=s||t<=e:t>=s&&t<=e}function E(){return D("sakura")}export{E as u};

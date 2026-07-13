@@ -1,0 +1,1 @@
+import{a as e,p as t}from"./chunk-LFPYN7LY-CkqpkPzF.js";function u({children:n,fallback:r=null}){const[s,a]=e.useState(!1);return e.useEffect(()=>a(!0),[]),s?t.jsx(t.Fragment,{children:n()}):t.jsx(t.Fragment,{children:r})}export{u as C};
